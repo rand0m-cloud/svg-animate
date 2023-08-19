@@ -165,8 +165,6 @@ impl SvgLiteral {
     pub fn format(&self, ctx: &mut AnimationContext) -> Element {
         let mut root = Element::new(self.tag.as_str());
 
-        println!("formatting: {:#?}", ctx.vars);
-
         let make_string = |value: AnimationContextValue| match value {
             AnimationContextValue::Number(n) => n.to_string(),
             AnimationContextValue::String(s) => s,

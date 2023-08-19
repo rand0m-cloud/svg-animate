@@ -1,5 +1,15 @@
+use std::{
+    io::Write,
+    process::{Command, Stdio},
+};
+
 use lex::lex;
 use parse::*;
+use resvg::{
+    tiny_skia::Pixmap,
+    usvg::{self, Transform, TreeParsing},
+    Tree,
+};
 use svg::{node::element::Element, Node};
 
 use crate::analysis::{Animation, AnimationContext};
@@ -17,13 +27,43 @@ fn main() {
 
     let mut time = 0.0;
     let mut index = 0;
+
+    let mut ffmpeg = Command::new("ffmpeg")
+        .args([
+            "-framerate",
+            "60",
+            "-y",
+            "-f",
+            "rawvideo",
+            "-pixel_format",
+            "rgba",
+            "-video_size",
+            "320x320",
+            "-i",
+            "-",
+            "out.mp4",
+        ])
+        .stdin(Stdio::piped())
+        .spawn()
+        .expect("ffmpeg command to work");
+
+    let mut stdin = ffmpeg.stdin.take().unwrap();
     while time < anim.duration {
         let frame = render_frame(time, &anim);
         time += 1.0 / 60.0;
 
-        std::fs::write(format!("{index:03}_test.svg"), frame.to_string()).unwrap();
+        let mut image = Pixmap::new(320, 320).unwrap();
+        let usvg = usvg::Tree::from_str(&frame.to_string(), &usvg::Options::default()).unwrap();
+        let svg = Tree::from_usvg(&usvg);
+        svg.render(Transform::default(), &mut image.as_mut());
+
+        stdin.write_all(&image.data()).unwrap();
+
         index += 1;
     }
+
+    drop(stdin);
+    ffmpeg.wait().unwrap();
 }
 
 fn render_frame(current_time: f32, animation: &Animation) -> Element {

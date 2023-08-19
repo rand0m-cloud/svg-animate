@@ -17,7 +17,7 @@ translate(x,y, tree) {
 sprite = square(time * 150)
 moved_sprite = translate(100, 100,rotate(360*percent, square(100)))
 
-fork animate 3s moved_sprite
+fork animate 10s moved_sprite
 animate 1s sprite 
 
 
