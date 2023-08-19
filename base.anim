@@ -1,0 +1,23 @@
+square(size) {
+  return <rect :width="size" :height="size" stroke="blue" fill="green" />
+}
+
+rotate(deg, tree) {
+  return <g :transform="rotate(deg)">
+   {{ tree() }}
+  </g>
+}
+
+translate(x,y, tree) {
+  return <g :transform="translate(x,y)">
+    {{ tree() }}
+  </g>
+}
+
+sprite = square(time * 150)
+moved_sprite = translate(100, 100,rotate(360*percent, square(100)))
+
+fork animate 3s moved_sprite
+animate 1s sprite 
+
+
