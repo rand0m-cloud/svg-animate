@@ -3,59 +3,25 @@ use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
 use quote::quote;
 use syn::{
     parse_macro_input, punctuated::Punctuated, Data, DataEnum, DataStruct, DeriveInput, Fields,
-    Generics, Lifetime, LitStr, Token,
+    LitStr, Token,
 };
 
-/// pub trait Parse<'a>: Sized {
-///     fn parse<'b>(input: &'b [Token<'a>]) -> Option<(&'b [Token<'a>], Self)>
-///     where
-///         'a: 'b;
-/// }
-///
-/// pub trait ParseOwned: Sized {
-///     fn parse_owned<'a, 'b>(input: &'b [Token<'a>]) -> Option<(&'b [Token<'a>], Self)>
-///     where
-///         'a: 'b;
-///
-///     fn parse_from_str(input: &str) -> Option<Self> {
-///         let tokens = lex(input);
-///         Some(Self::parse_owned(&tokens)?.1)
-///     }
+/// pub trait Parse: Sized {
+///     fn parse(input: &[Token]) -> Option<(&[Token], Self)>
 /// }
 
 #[proc_macro_derive(Parse, attributes(token))]
 pub fn derive(input: TokenStream) -> TokenStream {
-    let DeriveInput {
-        ident,
-        data,
-        generics,
-        ..
-    } = parse_macro_input!(input);
+    let DeriveInput { ident, data, .. } = parse_macro_input!(input);
     let output = match data {
-        Data::Struct(st) => do_struct(&ident, generics, &st, true),
-        Data::Enum(en) => do_enum(&ident, generics, &en, true),
+        Data::Struct(st) => do_struct(&ident, &st),
+        Data::Enum(en) => do_enum(&ident, &en),
         Data::Union(_) => panic!("no unions"),
     };
     output.into()
 }
 
-#[proc_macro_derive(ParseOwned, attributes(token))]
-pub fn derive_owned(input: TokenStream) -> TokenStream {
-    let DeriveInput {
-        ident,
-        data,
-        generics,
-        ..
-    } = parse_macro_input!(input);
-    let output = match data {
-        Data::Struct(st) => do_struct(&ident, generics, &st, false),
-        Data::Enum(en) => do_enum(&ident, generics, &en, false),
-        Data::Union(_) => panic!("no unions"),
-    };
-    output.into()
-}
-
-fn generate_statement(field: &syn::Field, index: usize, owned: bool) -> TokenStream2 {
+fn generate_statement(field: &syn::Field, index: usize) -> TokenStream2 {
     let ident = &field
         .ident
         .as_ref()
@@ -68,31 +34,23 @@ fn generate_statement(field: &syn::Field, index: usize, owned: bool) -> TokenStr
             .and_then(|i| (i == "token").then_some(()))?;
         attr.parse_args::<LitStr>().ok()
     });
-    match (token, owned) {
-        (None, false) => {
-            quote! { let (input, #ident) = Parse::parse(input)?; }
-        }
-        (Some(t), false) => {
+    match token {
+        Some(t) => {
             quote! {
                 let (input, #ident) = Token::parse_token(#t, input)?;
             }
         }
-        (None, true) => {
-            quote! { let (input, #ident) = ParseOwned::parse_owned(input)?; }
-        }
-        (Some(t), true) => {
-            quote! {
-                let (input, #ident) = Token::parse_token_owned(#t, input)?;
-            }
+        None => {
+            quote! { let (input, #ident) = Parse::parse(input)?; }
         }
     }
 }
 
-fn do_fields(fields: &Fields, tail_prefix: TokenStream2, owned: bool) -> TokenStream2 {
+fn do_fields(fields: &Fields, tail_prefix: TokenStream2) -> TokenStream2 {
     let statements = fields
         .into_iter()
         .enumerate()
-        .flat_map(|(i, f)| generate_statement(f, i, owned))
+        .flat_map(|(i, f)| generate_statement(f, i))
         .collect::<TokenStream2>();
     let tail = match fields {
         Fields::Named(named) => {
@@ -123,93 +81,37 @@ fn do_fields(fields: &Fields, tail_prefix: TokenStream2, owned: bool) -> TokenSt
     }
 }
 
-fn do_struct(
-    ident: &Ident,
-    mut generics: Generics,
-    st: &DataStruct,
-    generate_ref_impl: bool,
-) -> TokenStream2 {
-    let ref_impl = if generate_ref_impl {
-        let parse_exprs = do_fields(&st.fields, quote! {Self}, false);
-        quote! {
-            impl<'a> Parse<'a> for #ident #generics {
-                fn parse<'b>(input: &'b [Token<'a>]) -> Option<(&'b [Token<'a>], Self)> where 'a:'b{
-                    #parse_exprs
-                }
-            }
-        }
-    } else {
-        quote! {}
-    };
-
-    let parse_owned_exprs = do_fields(&st.fields, quote! {Self}, true);
-
-    if let Some(lifetime) = generics.lifetimes_mut().next() {
-        lifetime.lifetime = Lifetime::new("'static", Span::mixed_site());
-    };
-
+fn do_struct(ident: &Ident, st: &DataStruct) -> TokenStream2 {
+    let parse_exprs = do_fields(&st.fields, quote! {Self});
     quote! {
-        #ref_impl
-
-        impl ParseOwned  for #ident #generics {
-            fn parse_owned<'a, 'b>(input: &'b [Token<'a>]) -> Option<(&'b [Token<'a>], Self)>
-            where
-                'a: 'b {
-                #parse_owned_exprs
+        impl Parse for #ident {
+            fn parse(input: &[Token]) -> Option<(&[Token], Self)>{
+                #parse_exprs
             }
         }
     }
 }
 
-fn do_enum(
-    ident: &Ident,
-    mut generics: Generics,
-    en: &DataEnum,
-    generate_ref_impl: bool,
-) -> TokenStream2 {
-    let make_variants = |owned| {
-        en.variants
-            .iter()
-            .flat_map(|v| {
-                let variant = &v.ident;
-                let parse_exprs = do_fields(&v.fields, quote! {Self:: #variant}, owned);
-                quote! {
-                    if let v@Some(_) = { #parse_exprs } {
-                        return v;
-                    }
-                }
-            })
-            .collect::<TokenStream2>()
-    };
-
-    let ref_impl = if generate_ref_impl {
-        let variants = make_variants(false);
-        quote! {
-            impl<'a> Parse<'a> for #ident #generics{
-                fn parse<'b>(input: &'b [Token<'a>]) -> Option<(&'b [Token<'a>], Self)> where 'a:'b{
-                    #variants
-                    None
+fn do_enum(ident: &Ident, en: &DataEnum) -> TokenStream2 {
+    let variants = en
+        .variants
+        .iter()
+        .flat_map(|v| {
+            let variant = &v.ident;
+            let parse_exprs = do_fields(&v.fields, quote! {Self:: #variant});
+            quote! {
+                if let v@Some(_) = { #parse_exprs } {
+                    return v;
                 }
             }
-        }
-    } else {
-        quote! {}
-    };
-
-    let owned_variants = make_variants(true);
-
-    if let Some(lifetime) = generics.lifetimes_mut().next() {
-        lifetime.lifetime = Lifetime::new("'static", Span::mixed_site());
-    };
+        })
+        .collect::<TokenStream2>();
 
     quote! {
-        #ref_impl
-
-        impl ParseOwned  for #ident #generics {
-            fn parse_owned<'a, 'b>(input: &'b [Token<'a>]) -> Option<(&'b [Token<'a>], Self)>
-            where
-                'a: 'b {
-                #owned_variants
+        impl Parse for #ident {
+            fn parse(input: &[Token]) -> Option<(&[Token], Self)>
+                {
+                #variants
                 None
             }
         }

@@ -8,25 +8,25 @@ use derive_parse::*;
 use svg::node::element::Element;
 use svg::Node;
 
-#[derive(ParseOwned, Debug, Clone)]
+#[derive(Parse, Debug, Clone)]
 pub struct Animation {
     directives: Many1<Directive>,
 }
 
 impl Animation {
     pub fn animations(&self) -> impl Iterator<Item = &AnimationDef> {
-        self.directives.iter().filter_map(|x| match x {
+        self.directives.0.iter().filter_map(|x| match x {
             Directive::Animate(def) => Some(def),
             _ => None,
         })
     }
 
     pub fn directives(&self) -> impl Iterator<Item = &Directive> {
-        self.directives.iter()
+        self.directives.0.iter()
     }
 }
 
-#[derive(ParseOwned, Debug, Clone)]
+#[derive(Parse, Debug, Clone)]
 pub enum Directive {
     Assign(Ident, Equals, Value),
     Func(
@@ -40,14 +40,15 @@ pub enum Directive {
     ),
     Value(Return, Value),
     Animate(AnimationDef),
+    Wait(IntLiteral, DurationType),
 }
 
-#[derive(ParseOwned, Debug, Clone)]
+#[derive(Parse, Debug, Clone)]
 pub enum DurationType {
     Seconds(S),
 }
 
-#[derive(ParseOwned, Debug, Clone)]
+#[derive(Parse, Debug, Clone)]
 pub struct AnimationDef {
     pub fork: Option<Fork>,
     pub animate: Animate,
@@ -80,7 +81,7 @@ pub enum Value {
     Variable(Ident),
 }
 
-#[derive(ParseOwned, Debug, Clone)]
+#[derive(Parse, Debug, Clone)]
 pub enum BinaryOperator {
     Multiply(Star),
 }
@@ -95,12 +96,9 @@ impl Value {
     }
 }
 
-impl ParseOwned for Value {
-    fn parse_owned<'a, 'b>(input: &'b [Token<'a>]) -> Option<(&'b [Token<'a>], Self)>
-    where
-        'a: 'b,
-    {
-        #[derive(ParseOwned)]
+impl Parse for Value {
+    fn parse(input: &[Token]) -> Option<(&[Token], Self)> {
+        #[derive(Parse)]
         enum Simple {
             Null(Null),
             Int(IntLiteral),
@@ -109,9 +107,7 @@ impl ParseOwned for Value {
             Variable(Ident),
         }
 
-        let (input, simple) = Simple::parse_owned(input)?;
-
-        let mut input = input;
+        let (mut input, simple) = Simple::parse(input)?;
         let mut output = match simple {
             Simple::Null(n) => Value::Null(n),
             Simple::Int(i) => Value::Int(i),
@@ -120,23 +116,23 @@ impl ParseOwned for Value {
             Simple::Svg(s) => Value::Svg(s),
         };
 
-        #[derive(ParseOwned)]
+        #[derive(Parse)]
         enum PostFix {
             Call(Call),
             BinaryOp(BinaryOp),
         }
 
-        #[derive(ParseOwned)]
+        #[derive(Parse)]
         struct Call {
             open_paren: OpenParen,
             args: Punctated0<Value, Comma>,
             close_paren: CloseParen,
         }
 
-        #[derive(ParseOwned)]
+        #[derive(Parse)]
         struct BinaryOp(BinaryOperator, Value);
 
-        while let Some((new_input, postfix)) = PostFix::parse_owned(input) {
+        while let Some((new_input, postfix)) = PostFix::parse(input) {
             match postfix {
                 PostFix::Call(c) => {
                     output = Value::FuncCall(Box::new(output), c.open_paren, c.args, c.close_paren);
@@ -153,7 +149,7 @@ impl ParseOwned for Value {
     }
 }
 
-#[derive(ParseOwned, Debug, Clone)]
+#[derive(Parse, Debug, Clone)]
 pub struct SvgLiteral {
     _open: OpenAngle,
     tag: Ident,
@@ -180,8 +176,8 @@ impl SvgLiteral {
 
                     let value = match value {
                         Value::FuncCall(name, _, args, _) => {
-                            let args = args
-                                .into_iter()
+                            let args = args.0
+                                .iter()
                                 .map(|arg| {
                                     let arg = match arg {
                                         Value::Variable(ident) => ident.as_str(),
@@ -215,26 +211,23 @@ impl SvgLiteral {
                 }
             }
         }
-        match &self.body {
-            SvgLiteralBody::Open(_, items, _, _, tag, _) => {
-                assert_eq!(self.tag.as_str(), tag.as_str());
-                for item in &items.0 {
-                    let svg = match item {
-                        SvgLiteralBodyItem::Svg(svg) => svg.format(ctx),
-                        SvgLiteralBodyItem::Formatted(_, _, value, _, _) => {
-                            ctx.evaluate(&value).as_svg().unwrap().clone()
-                        }
-                    };
-                    root.append(svg);
-                }
+        if let SvgLiteralBody::Open(_, items, _, _, tag, _) = &self.body {
+            assert_eq!(self.tag.as_str(), tag.as_str());
+            for item in &items.0 {
+                let svg = match item {
+                    SvgLiteralBodyItem::Svg(svg) => svg.format(ctx),
+                    SvgLiteralBodyItem::Formatted(_, _, value, _, _) => {
+                        ctx.evaluate(value).as_svg().unwrap().clone()
+                    }
+                };
+                root.append(svg);
             }
-            _ => {}
         }
         root
     }
 }
 
-#[derive(ParseOwned, Debug, Clone)]
+#[derive(Parse, Debug, Clone)]
 pub enum SvgLiteralBody {
     Empty(Slash, CloseAngle),
     Open(
@@ -247,13 +240,13 @@ pub enum SvgLiteralBody {
     ),
 }
 
-#[derive(ParseOwned, Debug, Clone)]
+#[derive(Parse, Debug, Clone)]
 pub enum SvgLiteralBodyItem {
     Svg(SvgLiteral),
     Formatted(OpenBrace, OpenBrace, Value, CloseBrace, CloseBrace),
 }
 
-#[derive(ParseOwned, Debug, Clone)]
+#[derive(Parse, Debug, Clone)]
 pub enum SvgAttr {
     Formatted(Colon, Ident, Equals, StrLiteral),
     Normal(Ident, Equals, StrLiteral),

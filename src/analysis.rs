@@ -37,22 +37,28 @@ impl Animation {
 
 #[derive(Clone)]
 pub enum AnimationContextValue {
-    SVG(Element),
+    Svg(Element),
     Number(f32),
     String(String),
     Null,
     Native(
-        Rc<Box<dyn Fn(&mut AnimationContext, Vec<AnimationContextValue>) -> AnimationContextValue>>,
+        #[allow(clippy::type_complexity)]
+        Rc<
+            Box<dyn Fn(&mut AnimationContext, Vec<AnimationContextValue>) -> AnimationContextValue>,
+        >,
     ),
     Abstraction(
-        Rc<Box<dyn Fn(&mut AnimationContext, Vec<AnimationContextValue>) -> AnimationContextValue>>,
+        #[allow(clippy::type_complexity)]
+        Rc<
+            Box<dyn Fn(&mut AnimationContext, Vec<AnimationContextValue>) -> AnimationContextValue>,
+        >,
     ),
 }
 
 impl std::fmt::Debug for AnimationContextValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::SVG(arg0) => f.debug_tuple("SVG").field(arg0).finish(),
+            Self::Svg(arg0) => f.debug_tuple("SVG").field(arg0).finish(),
             Self::Number(arg0) => f.debug_tuple("Number").field(arg0).finish(),
             Self::String(arg0) => f.debug_tuple("String").field(arg0).finish(),
             Self::Null => write!(f, "Null"),
@@ -82,17 +88,6 @@ impl AnimationContextValue {
     pub fn null() -> Self {
         Self::Null
     }
-
-    pub fn into_string(&self) -> String {
-        match self {
-            Self::Abstraction(_) => "function()".to_string(),
-            Self::Native(_) => "native function()".to_string(),
-            Self::Null => "null".to_string(),
-            Self::String(s) => s.clone(),
-            Self::SVG(s) => s.to_string(),
-            Self::Number(s) => s.to_string(),
-        }
-    }
 }
 
 impl From<String> for AnimationContextValue {
@@ -109,13 +104,13 @@ impl From<f32> for AnimationContextValue {
 
 impl From<Element> for AnimationContextValue {
     fn from(v: Element) -> Self {
-        Self::SVG(v)
+        Self::Svg(v)
     }
 }
 
 impl AnimationContextValue {
     pub fn as_svg(&self) -> Option<&Element> {
-        if let Self::SVG(v) = self {
+        if let Self::Svg(v) = self {
             Some(v)
         } else {
             None
@@ -124,14 +119,6 @@ impl AnimationContextValue {
 
     pub fn as_number(&self) -> Option<&f32> {
         if let Self::Number(v) = self {
-            Some(v)
-        } else {
-            None
-        }
-    }
-
-    pub fn as_string(&self) -> Option<&String> {
-        if let Self::String(v) = self {
             Some(v)
         } else {
             None
@@ -183,10 +170,6 @@ impl AnimationContext {
         this
     }
 
-    fn get_output(&self) -> &Element {
-        &self.root
-    }
-
     pub fn get_var(&self, value: &str) -> Option<AnimationContextValue> {
         self.vars.get(value).cloned()
     }
@@ -200,15 +183,14 @@ impl AnimationContext {
         match directive {
             Directive::Assign(ident, _, val) => {
                 let val = self.evaluate(&val);
-                self.set_var(&ident.as_str(), val.clone());
+                self.set_var(&ident.as_str(), val);
 
                 AnimationContextValue::null()
             }
             Directive::Value(_, value) => self.evaluate(&value),
             Directive::Func(name, _, func_args, _, _, directives, _) => {
                 let func = {
-                    let name = name.clone();
-                    AnimationContextValue::abstraction(move |ctx, mut args| {
+                    AnimationContextValue::abstraction(move |ctx, args| {
                         fn curry(
                             func_args: Rc<[Ident]>,
                             args: Vec<AnimationContextValue>,
@@ -231,25 +213,20 @@ impl AnimationContext {
                             };
 
                             if func_args.len() != args.len() {
-                                return AnimationContextValue::abstraction(move |ctx, new_args| {
+                                AnimationContextValue::abstraction(move |ctx, new_args| {
                                     let args =
                                         args.iter().cloned().chain(new_args).collect::<Vec<_>>();
                                     if func_args.len() != args.len() {
-                                        curry(
-                                            func_args.clone(),
-                                            args.clone(),
-                                            directives.clone(),
-                                            ctx,
-                                        )
+                                        curry(func_args.clone(), args, directives.clone(), ctx)
                                     } else {
-                                        eval(ctx, args.clone())
+                                        eval(ctx, args)
                                     }
-                                });
+                                })
                             } else {
                                 eval(ctx, args)
                             }
                         }
-                        curry(Rc::from(&*func_args), args, Rc::from(&*directives), ctx)
+                        curry(Rc::from(&*func_args.0), args, Rc::from(&*directives.0), ctx)
                     })
                 };
                 self.set_var(&name.as_str(), func);
@@ -266,10 +243,8 @@ impl AnimationContext {
                     if self.current_time > self.tracked_time {
                         return AnimationContextValue::null();
                     }
-                } else {
-                    if self.current_time > self.tracked_time + def.duration() {
-                        return AnimationContextValue::null();
-                    }
+                } else if self.current_time > self.tracked_time + def.duration() {
+                    return AnimationContextValue::null();
                 }
 
                 let var = self.get_var(&def.sprite.as_str()).unwrap();
@@ -286,16 +261,16 @@ impl AnimationContext {
                 let output = if let Some(func) = def.func {
                     match self.evaluate(&func) {
                         AnimationContextValue::Abstraction(abs) => {
-                            abs(self, vec![AnimationContextValue::SVG(svg.clone())])
+                            abs(self, vec![AnimationContextValue::Svg(svg)])
                                 .as_svg()
                                 .unwrap()
                                 .clone()
                         }
-                        AnimationContextValue::SVG(e) => e,
+                        AnimationContextValue::Svg(e) => e,
                         _ => todo!(),
                     }
                 } else {
-                    svg.clone()
+                    svg
                 };
                 self.root.append(output);
 
@@ -325,11 +300,11 @@ impl AnimationContext {
                 let func = self.evaluate(fn_name);
                 match func {
                     AnimationContextValue::Abstraction(f) => f(self, args),
-                    AnimationContextValue::SVG(_) => func,
+                    AnimationContextValue::Svg(_) => func,
                     _ => panic!("expected {:?} to be an abstraction", fn_name),
                 }
             }
-            Value::Svg(svg) => AnimationContextValue::SVG(svg.format(self)),
+            Value::Svg(svg) => AnimationContextValue::Svg(svg.format(self)),
             Value::BinaryOp(left, op, right) => {
                 let left = self.evaluate(left);
                 let right = self.evaluate(right);
