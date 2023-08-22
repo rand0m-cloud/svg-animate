@@ -303,7 +303,7 @@ impl AnimationContext {
         match value {
             // TODO: IntLiteral::as_f32
             // IntLiteral -> NumberLiteral
-            Value::Int(i) => (i.as_usize() as f32).into(),
+            Value::Number(i) => (i.as_usize() as f32).into(),
 
             Value::Variable(ident) => self
                 .get_var(&ident.as_str())
@@ -333,6 +333,9 @@ impl AnimationContext {
                     }
                     BinaryOperator::Subtract(_) => {
                         (left.as_number().unwrap() - right.as_number().unwrap()).into()
+                    }
+                    BinaryOperator::Add(_) => {
+                        (left.as_number().unwrap() + right.as_number().unwrap()).into()
                     }
                 }
             }

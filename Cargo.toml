@@ -1,6 +1,6 @@
 [package]
 name = "svg-animate"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -12,6 +12,7 @@ derive-parse = {path = "derive"}
 derive_more = "0.99.17"
 nom_locate = "4.1.0"
 resvg = "0.35.0"
+clap = { version = "4.3.23", features = ["derive"] }
 
-[profile.dev.package."*"]
+[profile.dev.package.resvg]
 opt-level = 3

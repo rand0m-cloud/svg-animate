@@ -71,7 +71,7 @@ impl AnimationDef {
 #[derive(Debug, Clone)]
 pub enum Value {
     Null(Null),
-    Int(IntLiteral),
+    Number(IntLiteral),
     Str(StrLiteral),
     Svg(SvgLiteral),
     FuncCall(Box<Value>, OpenParen, Punctated0<Value, Comma>, CloseParen),
@@ -83,6 +83,7 @@ pub enum Value {
 pub enum BinaryOperator {
     Multiply(Star),
     Subtract(Minus),
+    Add(Plus),
 }
 
 impl Value {
@@ -104,15 +105,17 @@ impl Parse for Value {
             Str(StrLiteral),
             Svg(SvgLiteral),
             Variable(Ident),
+            Parenthesis(OpenParen, Box<Value>, CloseParen),
         }
 
         let (mut input, simple) = Simple::parse(input)?;
         let mut output = match simple {
             Simple::Null(n) => Value::Null(n),
-            Simple::Int(i) => Value::Int(i),
+            Simple::Int(i) => Value::Number(i),
             Simple::Str(s) => Value::Str(s),
             Simple::Variable(i) => Value::Variable(i),
             Simple::Svg(s) => Value::Svg(s),
+            Simple::Parenthesis(_, s, _) => *s,
         };
 
         #[derive(Parse)]
@@ -180,7 +183,7 @@ impl SvgLiteral {
                                 .map(|arg| {
                                     let arg = match arg {
                                         Value::Variable(ident) => ident.as_str(),
-                                        Value::Int(i)=> i.as_str(),
+                                        Value::Number(i)=> i.as_str(),
                                         Value::Str(s)=>s.get_inner_str().to_string(),
                                             _=> panic!("svg formatting can only handle vars, numbers, and strings")
                                     };
@@ -247,6 +250,22 @@ pub enum SvgLiteralBodyItem {
 
 #[derive(Parse, Debug, Clone)]
 pub enum SvgAttr {
-    Formatted(Colon, Ident, Equals, StrLiteral),
-    Normal(Ident, Equals, StrLiteral),
+    Formatted(Colon, SvgAttrName, Equals, StrLiteral),
+    Normal(SvgAttrName, Equals, StrLiteral),
+}
+
+#[derive(Parse, Debug, Clone)]
+pub struct SvgAttrName {
+    name: Punctated1<Ident, Minus>,
+}
+
+impl SvgAttrName {
+    pub fn as_str(&self) -> String {
+        self.name
+            .0
+            .iter()
+            .map(|x| x.as_str())
+            .collect::<Vec<_>>()
+            .join("-")
+    }
 }
