@@ -17,11 +17,19 @@ impl Animation {
     pub fn new(root: ast::Animation) -> Self {
         let mut linear_end = 0.0f32;
         let mut forked_end = 0.0f32;
-        for anim in root.animations() {
-            if anim.fork.is_some() {
-                forked_end = forked_end.max(linear_end + anim.duration.as_usize() as f32);
-            } else {
-                linear_end += anim.duration().as_secs_f32()
+        for directive in root.directives() {
+            match directive {
+                Directive::Animate(anim) => {
+                    if anim.fork.is_some() {
+                        forked_end = forked_end.max(linear_end + anim.duration.as_usize() as f32);
+                    } else {
+                        linear_end += anim.duration().as_secs_f32()
+                    }
+                }
+                Directive::Delay(_, int, unit) => {
+                    linear_end += unit.duration(int.as_usize()).as_secs_f32();
+                }
+                _ => {}
             }
         }
         Animation {
@@ -149,7 +157,7 @@ impl AnimationContext {
         );
         vars.insert(
             "load".to_string(),
-            AnimationContextValue::native(|_ctx, _args| AnimationContextValue::null()),
+            AnimationContextValue::native(|_ctx, _args| todo!("load native fn")),
         );
 
         let mut this = Self {
@@ -232,6 +240,10 @@ impl AnimationContext {
                 self.set_var(&name.as_str(), func);
                 AnimationContextValue::null()
             }
+            Directive::Delay(_, int, unit) => {
+                self.tracked_time += unit.duration(int.as_usize());
+                AnimationContextValue::null()
+            }
             Directive::Animate(def) => {
                 if self.current_time < self.tracked_time {
                     return AnimationContextValue::null();
@@ -258,15 +270,23 @@ impl AnimationContext {
                     })
                     .clone();
 
-                let output = if let Some(func) = def.func {
-                    match self.evaluate(&func) {
-                        AnimationContextValue::Abstraction(abs) => {
-                            abs(self, vec![AnimationContextValue::Svg(svg)])
-                                .as_svg()
-                                .unwrap()
-                                .clone()
-                        }
-                        AnimationContextValue::Svg(e) => e,
+                let output = if let Some(func) = &def.func {
+                    let local_percent = (self.current_time.as_secs_f32()
+                        - self.tracked_time.as_secs_f32())
+                        / def.duration().as_secs_f32()
+                        * -1.0;
+                    let local_percent = 1.0 - local_percent;
+                    match self.evaluate(func) {
+                        AnimationContextValue::Abstraction(abs) => abs(
+                            self,
+                            vec![
+                                AnimationContextValue::Number(local_percent),
+                                AnimationContextValue::Svg(svg),
+                            ],
+                        )
+                        .as_svg()
+                        .unwrap()
+                        .clone(),
                         _ => todo!(),
                     }
                 } else {
@@ -276,7 +296,6 @@ impl AnimationContext {
 
                 AnimationContextValue::null()
             }
-            _ => todo!("{directive:#?}"),
         }
     }
 
@@ -311,6 +330,9 @@ impl AnimationContext {
                 match op {
                     BinaryOperator::Multiply(_) => {
                         (left.as_number().unwrap() * right.as_number().unwrap()).into()
+                    }
+                    BinaryOperator::Subtract(_) => {
+                        (left.as_number().unwrap() - right.as_number().unwrap()).into()
                     }
                 }
             }

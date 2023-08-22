@@ -14,13 +14,6 @@ pub struct Animation {
 }
 
 impl Animation {
-    pub fn animations(&self) -> impl Iterator<Item = &AnimationDef> {
-        self.directives.0.iter().filter_map(|x| match x {
-            Directive::Animate(def) => Some(def),
-            _ => None,
-        })
-    }
-
     pub fn directives(&self) -> impl Iterator<Item = &Directive> {
         self.directives.0.iter()
     }
@@ -40,12 +33,19 @@ pub enum Directive {
     ),
     Value(Return, Value),
     Animate(AnimationDef),
-    Wait(IntLiteral, DurationType),
+    Delay(Delay, IntLiteral, DurationType),
 }
 
 #[derive(Parse, Debug, Clone)]
 pub enum DurationType {
     Seconds(S),
+}
+impl DurationType {
+    pub fn duration(&self, int: usize) -> Duration {
+        match self {
+            DurationType::Seconds(_) => Duration::from_secs(int as u64),
+        }
+    }
 }
 
 #[derive(Parse, Debug, Clone)]
@@ -60,9 +60,7 @@ pub struct AnimationDef {
 
 impl AnimationDef {
     pub fn duration(&self) -> Duration {
-        match self.duration_type {
-            DurationType::Seconds(_) => Duration::from_secs(self.duration.as_usize() as u64),
-        }
+        self.duration_type.duration(self.duration.as_usize())
     }
 
     pub fn is_forked(&self) -> bool {
@@ -84,6 +82,7 @@ pub enum Value {
 #[derive(Parse, Debug, Clone)]
 pub enum BinaryOperator {
     Multiply(Star),
+    Subtract(Minus),
 }
 
 impl Value {

@@ -19,7 +19,10 @@ pub trait Parse: Sized {
     fn parse_from_str(input: &str) -> Option<Self> {
         let lexed = lex(input);
         let (remaining, this) = Self::parse(&lexed)?;
-        assert!(remaining.is_empty());
+        assert!(
+            remaining.is_empty(),
+            "not all input lexed into tokens\n\n{remaining:?}"
+        );
         Some(this)
     }
 }
@@ -111,7 +114,7 @@ impl Parse for Ident {
         .finish();
         let (_, val) = res.ok()?;
 
-        if ["fork", "animate", "return"].contains(&val) {
+        if ["fork", "animate", "return", "null", "delay"].contains(&val) {
             return None;
         }
 
