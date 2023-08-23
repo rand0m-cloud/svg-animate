@@ -21,13 +21,13 @@ impl Animation {
             match directive {
                 Directive::Animate(anim) => {
                     if anim.fork.is_some() {
-                        forked_end = forked_end.max(linear_end + anim.duration.as_usize() as f32);
+                        forked_end = forked_end.max(linear_end + anim.duration.as_f32());
                     } else {
                         linear_end += anim.duration().as_secs_f32()
                     }
                 }
                 Directive::Delay(_, int, unit) => {
-                    linear_end += unit.duration(int.as_usize()).as_secs_f32();
+                    linear_end += unit.duration(int.as_f32()).as_secs_f32();
                 }
                 _ => {}
             }
@@ -241,7 +241,7 @@ impl AnimationContext {
                 AnimationContextValue::null()
             }
             Directive::Delay(_, int, unit) => {
-                self.tracked_time += unit.duration(int.as_usize());
+                self.tracked_time += unit.duration(int.as_f32());
                 AnimationContextValue::null()
             }
             Directive::Animate(def) => {
@@ -301,10 +301,7 @@ impl AnimationContext {
 
     pub fn evaluate(&mut self, value: &Value) -> AnimationContextValue {
         match value {
-            // TODO: IntLiteral::as_f32
-            // IntLiteral -> NumberLiteral
-            Value::Number(i) => (i.as_usize() as f32).into(),
-
+            Value::Number(i) => (i.as_f32()).into(),
             Value::Variable(ident) => self
                 .get_var(&ident.as_str())
                 .unwrap_or_else(|| panic!("expected variable {} to exist", ident.as_str())),

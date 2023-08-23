@@ -154,26 +154,39 @@ impl StrLiteral {
 }
 
 #[derive(Debug, Clone, Deref)]
-pub struct IntLiteral(pub Token);
+pub struct Integer(pub Token);
 
-impl Parse for IntLiteral {
+impl Parse for Integer {
     fn parse(input: &[Token]) -> Option<(&[Token], Self)> {
         let (input, t) = Token::parse(input)?;
 
         let res: Result<_, nom::error::Error<&str>> = digit1(t.value()).finish();
         res.ok()?;
 
-        Some((input, IntLiteral(t)))
+        Some((input, Integer(t)))
     }
 }
 
-impl IntLiteral {
-    pub fn as_usize(&self) -> usize {
-        self.0.value().parse().unwrap()
+impl Integer {
+    pub fn as_str(&self) -> String {
+        self.0.value().to_string()
+    }
+}
+
+#[derive(Debug, Parse, Clone)]
+pub struct NumberLiteral(Integer, Option<(Dot, Integer)>);
+
+impl NumberLiteral {
+    pub fn as_f32(&self) -> f32 {
+        self.as_str().parse().unwrap()
     }
 
     pub fn as_str(&self) -> String {
-        self.0.value().to_string()
+        if let Some((_, int)) = &self.1 {
+            format!("{}.{}", self.0.as_str(), int.as_str())
+        } else {
+            self.0.as_str()
+        }
     }
 }
 

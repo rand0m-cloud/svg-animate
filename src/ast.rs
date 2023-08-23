@@ -33,7 +33,7 @@ pub enum Directive {
     ),
     Value(Return, Value),
     Animate(AnimationDef),
-    Delay(Delay, IntLiteral, DurationType),
+    Delay(Delay, NumberLiteral, DurationType),
 }
 
 #[derive(Parse, Debug, Clone)]
@@ -41,9 +41,9 @@ pub enum DurationType {
     Seconds(S),
 }
 impl DurationType {
-    pub fn duration(&self, int: usize) -> Duration {
+    pub fn duration(&self, qty: f32) -> Duration {
         match self {
-            DurationType::Seconds(_) => Duration::from_secs(int as u64),
+            DurationType::Seconds(_) => Duration::from_secs_f32(qty),
         }
     }
 }
@@ -52,7 +52,7 @@ impl DurationType {
 pub struct AnimationDef {
     pub fork: Option<Fork>,
     pub animate: Animate,
-    pub duration: IntLiteral,
+    pub duration: NumberLiteral,
     pub duration_type: DurationType,
     pub sprite: Ident,
     pub func: Option<Value>,
@@ -60,7 +60,7 @@ pub struct AnimationDef {
 
 impl AnimationDef {
     pub fn duration(&self) -> Duration {
-        self.duration_type.duration(self.duration.as_usize())
+        self.duration_type.duration(self.duration.as_f32())
     }
 
     pub fn is_forked(&self) -> bool {
@@ -71,7 +71,7 @@ impl AnimationDef {
 #[derive(Debug, Clone)]
 pub enum Value {
     Null(Null),
-    Number(IntLiteral),
+    Number(NumberLiteral),
     Str(StrLiteral),
     Svg(SvgLiteral),
     FuncCall(Box<Value>, OpenParen, Punctated0<Value, Comma>, CloseParen),
@@ -101,7 +101,7 @@ impl Parse for Value {
         #[derive(Parse)]
         enum Simple {
             Null(Null),
-            Int(IntLiteral),
+            Number(NumberLiteral),
             Str(StrLiteral),
             Svg(SvgLiteral),
             Variable(Ident),
@@ -111,7 +111,7 @@ impl Parse for Value {
         let (mut input, simple) = Simple::parse(input)?;
         let mut output = match simple {
             Simple::Null(n) => Value::Null(n),
-            Simple::Int(i) => Value::Number(i),
+            Simple::Number(i) => Value::Number(i),
             Simple::Str(s) => Value::Str(s),
             Simple::Variable(i) => Value::Variable(i),
             Simple::Svg(s) => Value::Svg(s),

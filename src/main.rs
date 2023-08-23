@@ -39,8 +39,8 @@ struct Cli {
     height: u32,
 
     /// Framerate of the output
-    #[arg(long, default_value="60")]
-    framerate: u32
+    #[arg(long, default_value = "60")]
+    framerate: u32,
 }
 
 fn main() {
