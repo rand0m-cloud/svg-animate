@@ -114,7 +114,7 @@ impl Parse for Ident {
         .finish();
         let (_, val) = res.ok()?;
 
-        if ["fork", "animate", "return", "null", "delay"].contains(&val) {
+        if ["fork", "animate", "return", "null", "delay", "animation", "play"].contains(&val) {
             return None;
         }
 

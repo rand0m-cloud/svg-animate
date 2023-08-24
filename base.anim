@@ -1,38 +1,35 @@
-square(size) {
-  return <rect :width="size" :height="size" stroke="blue" fill="green" />
-}
+animation square {
+  square(size) {
+    return <rect :width="size" :height="size" stroke="blue" fill="green"/>
+  }
 
-rotate(deg, tree) {
-  return <g :transform="rotate(deg)">
-   {{ tree() }}
-  </g>
-}
+  translate(x,y, tree) {
+    return <g :transform="translate(x,y)"> {{ tree() }} </g>
+  }
 
-translate(x,y, tree) {
-  return <g :transform="translate(x,y)">
-    {{ tree() }}
-  </g>
-}
+  rotate(amt,  tree) {
+    return <g :transform="rotate(amt)"> {{ tree() }} </g>
+  }
 
+  sprite = translate(100, 100, rotate(1080 * time, translate(50 -100 , 50 -100, square(100))))
+
+  animate 5s sprite
+}
 
 fadeIn(local_percent, tree) {
-   return <g :opacity="local_percent"> {{ tree() }} </g>
+  return <g :opacity="local_percent"> {{ tree() }} </g>
 }
 
 fadeOut(local_percent, tree) {
-   opacity = 1 - local_percent
-   return <g :opacity="opacity"> {{ tree() }} </g>
+  local_percent = 1-local_percent
+  return <g :opacity="local_percent"> {{ tree() }} </g>
 }
 
-rotateE(local_percent, tree) {
-  return rotate(local_percent * 1080, tree)
-}
 
-sprite = square(100)
 
-fork animate 3s sprite rotateE
-delay 1s
-animate 1s sprite fadeIn
-animate 1s sprite fadeOut
-delay 3s
-animate 5s sprite fadeIn
+sprite = <rect width="100" height="100" stroke="blue" fill="red"/>
+
+animate 1s sprite
+play square fadeIn
+play square fadeOut
+animate 1s sprite

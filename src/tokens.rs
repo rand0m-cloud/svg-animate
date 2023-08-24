@@ -45,5 +45,7 @@ tokens!(
     (S, "s"),
     (Fork, "fork"),
     (Animate, "animate"),
-    (Delay, "delay")
+    (Delay, "delay"),
+    (Animation, "animation"),
+    (Play, "play")
 );

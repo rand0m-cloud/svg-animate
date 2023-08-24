@@ -3,6 +3,7 @@ use std::time::Duration;
 use crate::analysis::AnimationContext;
 use crate::analysis::AnimationContextValue;
 use crate::parse::*;
+use crate::tokens;
 use crate::tokens::*;
 use derive_parse::*;
 use svg::node::element::Element;
@@ -34,6 +35,8 @@ pub enum Directive {
     Value(Return, Value),
     Animate(AnimationDef),
     Delay(Delay, NumberLiteral, DurationType),
+    Animation(tokens::Animation, Ident, OpenBrace, Animation, CloseBrace),
+    Play(Option<Fork>, tokens::Play, Ident, Option<Value>)
 }
 
 #[derive(Parse, Debug, Clone)]
@@ -203,7 +206,7 @@ impl SvgLiteral {
 
                             make_string(value)
                         }
-                        _ => panic!(),
+                        x => panic!("{x:?}"),
                     };
 
                     root.assign(name.as_str(), value);

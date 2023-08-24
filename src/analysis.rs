@@ -10,24 +10,43 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct Animation {
     pub root: ast::Animation,
-    pub duration: f32,
+    pub duration: Duration,
 }
 
 impl Animation {
     pub fn new(root: ast::Animation) -> Self {
-        let mut linear_end = 0.0f32;
-        let mut forked_end = 0.0f32;
+        let mut linear_end = Duration::default();
+        let mut forked_end = Duration::default();
+        let mut animations = HashMap::new();
+
+        for directive in root.directives() {
+            match directive {
+                Directive::Animation(_,name , _ ,anim , _) => {
+                    animations.insert(name.as_str(), Animation::new(anim.clone()));
+                }
+                _=>{}
+            }
+        }
+
         for directive in root.directives() {
             match directive {
                 Directive::Animate(anim) => {
                     if anim.fork.is_some() {
-                        forked_end = forked_end.max(linear_end + anim.duration.as_f32());
+                        forked_end = forked_end.max(linear_end + anim.duration());
                     } else {
-                        linear_end += anim.duration().as_secs_f32()
+                        linear_end += anim.duration()
                     }
                 }
                 Directive::Delay(_, int, unit) => {
-                    linear_end += unit.duration(int.as_f32()).as_secs_f32();
+                    linear_end += unit.duration(int.as_f32());
+                }
+                Directive::Play(fork, _, name, _) => {
+                    let anim = animations.get(&name.as_str()).unwrap();
+                    if fork.is_some() {
+                        forked_end = forked_end.max(linear_end + anim.duration);
+                    } else {
+                        linear_end += anim.duration
+                    }
                 }
                 _ => {}
             }
@@ -61,6 +80,7 @@ pub enum AnimationContextValue {
             Box<dyn Fn(&mut AnimationContext, Vec<AnimationContextValue>) -> AnimationContextValue>,
         >,
     ),
+    Animation(Animation),
 }
 
 impl std::fmt::Debug for AnimationContextValue {
@@ -72,6 +92,7 @@ impl std::fmt::Debug for AnimationContextValue {
             Self::Null => write!(f, "Null"),
             Self::Native(_) => f.debug_tuple("Native").finish(),
             Self::Abstraction(_) => f.debug_tuple("Abstraction").finish(),
+            Self::Animation(anim) => f.debug_tuple("Animation").field(anim).finish(),
         }
     }
 }
@@ -95,6 +116,14 @@ impl AnimationContextValue {
 
     pub fn null() -> Self {
         Self::Null
+    }
+
+    pub fn as_animation(&self) -> Option<&Animation> {
+        if let Self::Animation(v) = self {
+            Some(v)
+        } else {
+            None
+        }
     }
 }
 
@@ -148,12 +177,12 @@ impl AnimationContext {
         let mut vars = HashMap::new();
         vars.insert(
             "duration".to_string(),
-            AnimationContextValue::Number(anim.duration),
+            AnimationContextValue::Number(anim.duration.as_secs_f32()),
         );
         vars.insert("time".to_string(), AnimationContextValue::Number(time));
         vars.insert(
             "percent".to_string(),
-            AnimationContextValue::Number(time / anim.duration),
+            AnimationContextValue::Number(time / anim.duration.as_secs_f32()),
         );
         vars.insert(
             "load".to_string(),
@@ -165,7 +194,7 @@ impl AnimationContext {
             root: Element::new("g"),
             current_time: Duration::from_secs_f32(time),
             tracked_time: Duration::default(),
-            duration: Duration::from_secs_f32(anim.duration),
+            duration: anim.duration,
         };
 
         for d in anim.root.directives() {
@@ -293,6 +322,59 @@ impl AnimationContext {
                     svg
                 };
                 self.root.append(output);
+
+                AnimationContextValue::null()
+            }
+            Directive::Play(fork, _, name, func) => {
+                let val = self.get_var(&name.as_str()).unwrap();
+                let anim = val.as_animation().unwrap();
+                if self.current_time < self.tracked_time {
+                    return AnimationContextValue::null();
+                }
+
+                if fork.is_none() {
+                    self.tracked_time += anim.duration;
+
+                    if self.current_time > self.tracked_time {
+                        return AnimationContextValue::null();
+                    }
+                } else if self.current_time > self.tracked_time + anim.duration {
+                    return AnimationContextValue::null();
+                }
+
+                let svg = anim.render((self.current_time - (self.tracked_time - anim.duration)).as_secs_f32());
+                let output = if let Some(func) = &func {
+                    let local_percent = (self.tracked_time.as_secs_f32()
+                        - self.current_time.as_secs_f32())
+                        / anim.duration.as_secs_f32()
+                        ;
+                    let local_percent = 1.0 - local_percent;
+                    match self.evaluate(func) {
+                        AnimationContextValue::Abstraction(abs) => abs(
+                            self,
+                            vec![
+                                AnimationContextValue::Number(local_percent),
+                                AnimationContextValue::Svg(svg),
+                            ],
+                        )
+                        .as_svg()
+                        .unwrap()
+                        .clone(),
+                        _ => todo!(),
+                    }
+                } else {
+                    svg
+                };
+
+                self.root.append(output);
+
+                AnimationContextValue::null()
+            }
+            Directive::Animation(_, name, _, anim, _) => {
+                self.set_var(
+                    &name.as_str(),
+                    AnimationContextValue::Animation(Animation::new(anim)),
+                );
 
                 AnimationContextValue::null()
             }

@@ -71,7 +71,7 @@ fn main() {
         .expect("ffmpeg command to work");
 
     let mut stdin = ffmpeg.stdin.take().unwrap();
-    while time < anim.duration {
+    while time < anim.duration.as_secs_f32() {
         let frame = render_frame(time, &anim, &args);
         time += 1.0 / args.framerate as f32;
 
