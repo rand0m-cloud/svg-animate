@@ -114,7 +114,17 @@ impl Parse for Ident {
         .finish();
         let (_, val) = res.ok()?;
 
-        if ["fork", "animate", "return", "null", "delay", "animation", "play"].contains(&val) {
+        if [
+            "fork",
+            "animate",
+            "return",
+            "null",
+            "delay",
+            "animation",
+            "play",
+        ]
+        .contains(&val)
+        {
             return None;
         }
 
@@ -174,7 +184,7 @@ impl Integer {
 }
 
 #[derive(Debug, Parse, Clone)]
-pub struct NumberLiteral(Integer, Option<(Dot, Integer)>);
+pub struct NumberLiteral(Option<Minus>, Integer, Option<(Dot, Integer)>);
 
 impl NumberLiteral {
     pub fn as_f32(&self) -> f32 {
@@ -182,10 +192,11 @@ impl NumberLiteral {
     }
 
     pub fn as_str(&self) -> String {
-        if let Some((_, int)) = &self.1 {
-            format!("{}.{}", self.0.as_str(), int.as_str())
+        let negative = self.0.as_ref().map(|_| "-").unwrap_or_else(|| "");
+        if let Some((_, int)) = &self.2 {
+            format!("{}{}.{}", negative, self.1.as_str(), int.as_str())
         } else {
-            self.0.as_str()
+            format!("{}{}", negative, self.1.as_str())
         }
     }
 }

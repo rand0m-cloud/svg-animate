@@ -20,11 +20,8 @@ impl Animation {
         let mut animations = HashMap::new();
 
         for directive in root.directives() {
-            match directive {
-                Directive::Animation(_,name , _ ,anim , _) => {
-                    animations.insert(name.as_str(), Animation::new(anim.clone()));
-                }
-                _=>{}
+            if let Directive::Animation(_, name, _, anim, _) = directive {
+                animations.insert(name.as_str(), Animation::new(anim.clone()));
             }
         }
 
@@ -215,16 +212,17 @@ impl AnimationContext {
         self.vars.insert(var.to_string(), value.into());
     }
 
-    fn evaluate_directive(&mut self, directive: &Directive) -> AnimationContextValue {
+    fn evaluate_directive(&mut self, directive: &Directive) -> Option<AnimationContextValue>{
         let directive = directive.clone();
         match directive {
             Directive::Assign(ident, _, val) => {
                 let val = self.evaluate(&val);
                 self.set_var(&ident.as_str(), val);
 
-                AnimationContextValue::null()
             }
-            Directive::Value(_, value) => self.evaluate(&value),
+            Directive::Value(_, value) => {
+                return Some(self.evaluate(&value));
+            },
             Directive::Func(name, _, func_args, _, _, directives, _) => {
                 let func = {
                     AnimationContextValue::abstraction(move |ctx, args| {
@@ -233,7 +231,7 @@ impl AnimationContext {
                             args: Vec<AnimationContextValue>,
                             directives: Rc<[Directive]>,
                             ctx: &mut AnimationContext,
-                        ) -> AnimationContextValue {
+                        ) -> AnimationContextValue{
                             let eval = {
                                 let func_args = func_args.clone();
                                 let directives = directives.clone();
@@ -249,43 +247,41 @@ impl AnimationContext {
                                 }
                             };
 
-                            if func_args.len() != args.len() {
+                            if func_args.len() == args.len() {
+                                eval(ctx, args).unwrap_or_else(AnimationContextValue::null)
+                            } else {
                                 AnimationContextValue::abstraction(move |ctx, new_args| {
                                     let args =
                                         args.iter().cloned().chain(new_args).collect::<Vec<_>>();
-                                    if func_args.len() != args.len() {
-                                        curry(func_args.clone(), args, directives.clone(), ctx)
+                                    if func_args.len() == args.len() {
+                                        eval(ctx, args).unwrap_or_else(AnimationContextValue::null)
                                     } else {
-                                        eval(ctx, args)
+                                        curry(func_args.clone(), args, directives.clone(), ctx)
                                     }
                                 })
-                            } else {
-                                eval(ctx, args)
                             }
                         }
                         curry(Rc::from(&*func_args.0), args, Rc::from(&*directives.0), ctx)
                     })
                 };
                 self.set_var(&name.as_str(), func);
-                AnimationContextValue::null()
             }
             Directive::Delay(_, int, unit) => {
                 self.tracked_time += unit.duration(int.as_f32());
-                AnimationContextValue::null()
             }
             Directive::Animate(def) => {
                 if self.current_time < self.tracked_time {
-                    return AnimationContextValue::null();
+                    return None;
                 }
 
                 if !def.is_forked() {
                     self.tracked_time += def.duration();
 
                     if self.current_time > self.tracked_time {
-                        return AnimationContextValue::null();
+                        return None;
                     }
                 } else if self.current_time > self.tracked_time + def.duration() {
-                    return AnimationContextValue::null();
+                    return None;
                 }
 
                 let var = self.get_var(&def.sprite.as_str()).unwrap();
@@ -323,31 +319,31 @@ impl AnimationContext {
                 };
                 self.root.append(output);
 
-                AnimationContextValue::null()
             }
             Directive::Play(fork, _, name, func) => {
                 let val = self.get_var(&name.as_str()).unwrap();
                 let anim = val.as_animation().unwrap();
                 if self.current_time < self.tracked_time {
-                    return AnimationContextValue::null();
+                    return None;
                 }
 
                 if fork.is_none() {
                     self.tracked_time += anim.duration;
 
                     if self.current_time > self.tracked_time {
-                        return AnimationContextValue::null();
+                        return None;
                     }
                 } else if self.current_time > self.tracked_time + anim.duration {
-                    return AnimationContextValue::null();
+                    return None;
                 }
 
-                let svg = anim.render((self.current_time - (self.tracked_time - anim.duration)).as_secs_f32());
+                let svg = anim.render(
+                    (self.current_time - (self.tracked_time - anim.duration)).as_secs_f32(),
+                );
                 let output = if let Some(func) = &func {
                     let local_percent = (self.tracked_time.as_secs_f32()
                         - self.current_time.as_secs_f32())
-                        / anim.duration.as_secs_f32()
-                        ;
+                        / anim.duration.as_secs_f32();
                     let local_percent = 1.0 - local_percent;
                     match self.evaluate(func) {
                         AnimationContextValue::Abstraction(abs) => abs(
@@ -367,23 +363,22 @@ impl AnimationContext {
                 };
 
                 self.root.append(output);
-
-                AnimationContextValue::null()
             }
             Directive::Animation(_, name, _, anim, _) => {
                 self.set_var(
                     &name.as_str(),
                     AnimationContextValue::Animation(Animation::new(anim)),
                 );
-
-                AnimationContextValue::null()
             }
-        }
+        };
+        None
     }
 
     pub fn evaluate(&mut self, value: &Value) -> AnimationContextValue {
         match value {
-            Value::Number(i) => (i.as_f32()).into(),
+            Value::Number(i) => {
+                i.as_f32().into()
+            },
             Value::Variable(ident) => self
                 .get_var(&ident.as_str())
                 .unwrap_or_else(|| panic!("expected variable {} to exist", ident.as_str())),

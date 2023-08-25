@@ -47,7 +47,7 @@ fn main() {
     let args = Cli::parse();
 
     let animation_source = std::fs::read_to_string(&args.input).unwrap();
-    let anim = Animation::new(ast::Animation::parse_from_str(&animation_source).unwrap());
+    let anim = Animation::new(ast::Animation::parse_from_str(&animation_source).expect("animation didn't parse :("));
 
     let mut time = 0.0;
 
