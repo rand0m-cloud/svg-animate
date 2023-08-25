@@ -47,9 +47,9 @@ fn main() {
     let args = Cli::parse();
 
     let animation_source = std::fs::read_to_string(&args.input).unwrap();
-    let anim = Animation::new(ast::Animation::parse_from_str(&animation_source).expect("animation didn't parse :("));
-
-    let mut time = 0.0;
+    let anim = Animation::new(
+        ast::Animation::parse_from_str(&animation_source).expect("animation didn't parse :("),
+    );
 
     let mut ffmpeg = Command::new("ffmpeg")
         .args([
@@ -71,6 +71,10 @@ fn main() {
         .expect("ffmpeg command to work");
 
     let mut stdin = ffmpeg.stdin.take().unwrap();
+
+    let mut frame_index = 0;
+    let mut time = 0.0;
+
     while time < anim.duration.as_secs_f32() {
         let frame = render_frame(time, &anim, &args);
         time += 1.0 / args.framerate as f32;
@@ -80,7 +84,12 @@ fn main() {
         let svg = Tree::from_usvg(&usvg);
         svg.render(Transform::default(), &mut image.as_mut());
 
+        frame_index += 1;
         stdin.write_all(image.data()).unwrap();
+    }
+
+    if frame_index == 0 {
+        render_frame(0.0, &anim, &args);
     }
 
     drop(stdin);

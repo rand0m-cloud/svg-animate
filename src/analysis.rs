@@ -78,6 +78,7 @@ pub enum AnimationContextValue {
         >,
     ),
     Animation(Animation),
+    Object(HashMap<String, AnimationContextValue>),
 }
 
 impl std::fmt::Debug for AnimationContextValue {
@@ -86,6 +87,7 @@ impl std::fmt::Debug for AnimationContextValue {
             Self::Svg(arg0) => f.debug_tuple("SVG").field(arg0).finish(),
             Self::Number(arg0) => f.debug_tuple("Number").field(arg0).finish(),
             Self::String(arg0) => f.debug_tuple("String").field(arg0).finish(),
+            Self::Object(arg0) => f.debug_tuple("Object").field(arg0).finish(),
             Self::Null => write!(f, "Null"),
             Self::Native(_) => f.debug_tuple("Native").finish(),
             Self::Abstraction(_) => f.debug_tuple("Abstraction").finish(),
@@ -117,6 +119,14 @@ impl AnimationContextValue {
 
     pub fn as_animation(&self) -> Option<&Animation> {
         if let Self::Animation(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_object(&self) -> Option<&HashMap<String, AnimationContextValue>> {
+        if let Self::Object(v) = self {
             Some(v)
         } else {
             None
@@ -212,17 +222,16 @@ impl AnimationContext {
         self.vars.insert(var.to_string(), value.into());
     }
 
-    fn evaluate_directive(&mut self, directive: &Directive) -> Option<AnimationContextValue>{
+    fn evaluate_directive(&mut self, directive: &Directive) -> Option<AnimationContextValue> {
         let directive = directive.clone();
         match directive {
             Directive::Assign(ident, _, val) => {
                 let val = self.evaluate(&val);
                 self.set_var(&ident.as_str(), val);
-
             }
             Directive::Value(_, value) => {
                 return Some(self.evaluate(&value));
-            },
+            }
             Directive::Func(name, _, func_args, _, _, directives, _) => {
                 let func = {
                     AnimationContextValue::abstraction(move |ctx, args| {
@@ -231,7 +240,7 @@ impl AnimationContext {
                             args: Vec<AnimationContextValue>,
                             directives: Rc<[Directive]>,
                             ctx: &mut AnimationContext,
-                        ) -> AnimationContextValue{
+                        ) -> AnimationContextValue {
                             let eval = {
                                 let func_args = func_args.clone();
                                 let directives = directives.clone();
@@ -318,7 +327,6 @@ impl AnimationContext {
                     svg
                 };
                 self.root.append(output);
-
             }
             Directive::Play(fork, _, name, func) => {
                 let val = self.get_var(&name.as_str()).unwrap();
@@ -376,9 +384,7 @@ impl AnimationContext {
 
     pub fn evaluate(&mut self, value: &Value) -> AnimationContextValue {
         match value {
-            Value::Number(i) => {
-                i.as_f32().into()
-            },
+            Value::Number(i) => i.as_f32().into(),
             Value::Variable(ident) => self
                 .get_var(&ident.as_str())
                 .unwrap_or_else(|| panic!("expected variable {} to exist", ident.as_str())),
@@ -412,6 +418,24 @@ impl AnimationContext {
                         (left.as_number().unwrap() + right.as_number().unwrap()).into()
                     }
                 }
+            }
+            Value::DotField(val, _, name) => {
+                let obj = self.evaluate(val);
+                let obj = obj
+                    .as_object()
+                    .unwrap_or_else(|| panic!("expected object, found: {obj:?}"));
+
+                obj.get(&name.as_str())
+                    .unwrap_or_else(|| panic!("expected object field to exist: {}", name.as_str()))
+                    .clone()
+            }
+            Value::Object(_, fields, _) => {
+                let obj = fields
+                    .0
+                    .iter()
+                    .map(|f| (f.0.as_str(), self.evaluate(&f.2)))
+                    .collect();
+                AnimationContextValue::Object(obj)
             }
         }
     }

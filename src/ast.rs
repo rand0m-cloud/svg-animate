@@ -36,7 +36,7 @@ pub enum Directive {
     Animate(AnimationDef),
     Delay(Delay, NumberLiteral, DurationType),
     Animation(tokens::Animation, Ident, OpenBrace, Animation, CloseBrace),
-    Play(Option<Fork>, tokens::Play, Ident, Option<Value>)
+    Play(Option<Fork>, tokens::Play, Ident, Option<Value>),
 }
 
 #[derive(Parse, Debug, Clone)]
@@ -80,7 +80,12 @@ pub enum Value {
     FuncCall(Box<Value>, OpenParen, Punctated0<Value, Comma>, CloseParen),
     BinaryOp(Box<Value>, BinaryOperator, Box<Value>),
     Variable(Ident),
+    DotField(Box<Value>, Dot, Ident),
+    Object(OpenBrace, Punctated0<ObjectField, Comma>, CloseBrace),
 }
+
+#[derive(Parse, Debug, Clone)]
+pub struct ObjectField(pub Ident, pub Colon, pub Value);
 
 #[derive(Parse, Debug, Clone)]
 pub enum BinaryOperator {
@@ -109,6 +114,7 @@ impl Parse for Value {
             Svg(SvgLiteral),
             Variable(Ident),
             Parenthesis(OpenParen, Box<Value>, CloseParen),
+            Object(OpenBrace, Punctated0<ObjectField, Comma>, CloseBrace),
         }
 
         let (mut input, simple) = Simple::parse(input)?;
@@ -119,12 +125,14 @@ impl Parse for Value {
             Simple::Variable(i) => Value::Variable(i),
             Simple::Svg(s) => Value::Svg(s),
             Simple::Parenthesis(_, s, _) => *s,
+            Simple::Object(open, fields, close) => Value::Object(open, fields, close),
         };
 
         #[derive(Parse)]
         enum PostFix {
             Call(Call),
             BinaryOp(BinaryOp),
+            DotField(Dot, Ident),
         }
 
         #[derive(Parse)]
@@ -144,6 +152,9 @@ impl Parse for Value {
                 }
                 PostFix::BinaryOp(op) => {
                     output = Value::BinaryOp(Box::new(output), op.0, Box::new(op.1));
+                }
+                PostFix::DotField(dot, ident) => {
+                    output = Value::DotField(Box::new(output), dot, ident);
                 }
             }
 
