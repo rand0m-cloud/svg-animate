@@ -1,0 +1,22 @@
+center(svg) {
+  box = bounding_box(svg)
+  x = -1 * (box.width/2)
+  y = -1 * (box.height/2)
+  return <g :transform="translate(x,y)"> {{ svg }} </g>
+}
+
+square(size) {
+  return <rect fill="green" stroke="blue" stroke-width="5px" :width="size" :height="size" />
+}
+
+translate(x,y, tree) {
+  return <g :transform="translate(x,y)"> {{ tree }} </g>
+}
+
+rotate(amt , tree) {
+  return <g :transform="rotate(amt)"> {{ tree }} </g>
+}
+
+sprite = rotate(720 * percent, center(square(100)))
+sprite = translate(100, 100, sprite)
+animate 0.5s sprite

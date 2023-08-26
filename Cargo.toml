@@ -1,5 +1,5 @@
 [package]
-name = "svg-animate"
+name = "svg_animate"
 version = "0.2.0"
 edition = "2021"
 
@@ -16,3 +16,10 @@ clap = { version = "4.3.23", features = ["derive"] }
 
 [profile.dev.package.resvg]
 opt-level = 3
+
+[dev-dependencies]
+criterion = "0.3"
+
+[[bench]]
+name = "render"
+harness = false
