@@ -1,37 +1,22 @@
-animation square {
-  square(size) {
-    return <rect :width="size" :height="size" stroke="blue" fill="green"/>
-  }
-
-  translate(x,y, tree) {
-    return <g :transform="translate(x,y)"> {{ tree() }} </g>
-  }
-
-  rotate(amt,  tree) {
-    return <g :transform="rotate(amt)"> {{ tree() }} </g>
-  }
-
-  sprite =  translate(100, 100, rotate(1080 * time, translate( -50,  -50, square(100))))
-
-  animate 5s sprite
+center(svg) {
+  box = bounding_box(svg)
+  x = -1 * (box.width/2)
+  y = -1 * (box.height/2)
+  return <g :transform="translate(x,y)"> {{ svg }} </g>
 }
 
-fadeIn(local_percent, tree) {
-  return <g :opacity="local_percent"> {{ tree() }} </g>
+square(size) {
+  return <rect fill="green" stroke="blue" stroke-width="5px" :width="size" :height="size" />
 }
 
-fadeOut(local_percent, tree) {
-  local_percent = 1-local_percent
-  return <g :opacity="local_percent"> {{ tree() }} </g>
+translate(x,y, tree) {
+  return <g :transform="translate(x,y)"> {{ tree }} </g>
 }
 
-fadeInOut(local_percent, tree) {
+rotate(amt , tree) {
+  return <g :transform="rotate(amt)"> {{ tree }} </g>
 }
 
-
-
-sprite = <rect width="100" height="100" stroke="blue" fill="red"/>
-
-animate 1s sprite
-play square fadeInOut
-animate 1s sprite
+sprite = rotate(720 * percent, center(square(100)))
+sprite = translate(100, 100, sprite)
+animate 5s sprite

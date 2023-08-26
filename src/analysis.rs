@@ -1,5 +1,9 @@
 use std::{collections::HashMap, rc::Rc, time::Duration};
 
+use resvg::{
+    usvg::{self, Rect, TreeParsing},
+    Tree,
+};
 use svg::{node::element::Element, Node};
 
 use crate::{
@@ -84,7 +88,7 @@ pub enum AnimationContextValue {
 impl std::fmt::Debug for AnimationContextValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Svg(arg0) => f.debug_tuple("SVG").field(arg0).finish(),
+            Self::Svg(arg0) => f.write_str(&arg0.to_string()),
             Self::Number(arg0) => f.debug_tuple("Number").field(arg0).finish(),
             Self::String(arg0) => f.debug_tuple("String").field(arg0).finish(),
             Self::Object(arg0) => f.debug_tuple("Object").field(arg0).finish(),
@@ -194,6 +198,43 @@ impl AnimationContext {
         vars.insert(
             "load".to_string(),
             AnimationContextValue::native(|_ctx, _args| todo!("load native fn")),
+        );
+        vars.insert(
+            "bounding_box".to_string(),
+            AnimationContextValue::native(|_ctx, args| {
+                let svg_arg = args[0].as_svg().unwrap();
+
+                let mut svg = Element::new("svg");
+                svg.append(svg_arg.clone());
+                svg.assign("xmlns", "http://www.w3.org/2000/svg");
+
+                let usvg =
+                    usvg::Tree::from_str(&svg.to_string(), &usvg::Options::default()).unwrap();
+                let tree = Tree::from_usvg(&usvg);
+                let rect = tree
+                    .content_area
+                    .unwrap_or_else(|| Rect::from_xywh(0.00, 0.0, 0.0, 0.0).unwrap());
+
+                let fields = [
+                    ("x", rect.x()),
+                    ("y", rect.y()),
+                    ("width", rect.width()),
+                    ("height", rect.height()),
+                ]
+                .iter()
+                .map(|(k, v)| (k.to_string(), (*v).into()))
+                .collect::<HashMap<_, AnimationContextValue>>();
+
+                AnimationContextValue::Object(fields)
+            }),
+        );
+
+        vars.insert(
+            "debug".to_string(),
+            AnimationContextValue::native(|_ctx, args| {
+                println!("{:?}", args);
+                AnimationContextValue::null()
+            }),
         );
 
         let mut this = Self {
@@ -399,6 +440,7 @@ impl AnimationContext {
                 let func = self.evaluate(fn_name);
                 match func {
                     AnimationContextValue::Abstraction(f) => f(self, args),
+                    AnimationContextValue::Native(f) => f(self, args),
                     AnimationContextValue::Svg(_) => func,
                     _ => panic!("expected {:?} to be an abstraction", fn_name),
                 }
@@ -416,6 +458,9 @@ impl AnimationContext {
                     }
                     BinaryOperator::Add(_) => {
                         (left.as_number().unwrap() + right.as_number().unwrap()).into()
+                    }
+                    BinaryOperator::Divide(_) => {
+                        (left.as_number().unwrap() / right.as_number().unwrap()).into()
                     }
                 }
             }

@@ -92,6 +92,7 @@ pub enum BinaryOperator {
     Multiply(Star),
     Subtract(Minus),
     Add(Plus),
+    Divide(Slash),
 }
 
 impl Value {
