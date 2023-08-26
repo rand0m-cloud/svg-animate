@@ -1,8 +1,7 @@
 use std
 
-square(size) {
-  return <rect fill="green" stroke="blue" stroke-width="5px" :width="size" :height="size" />
-}
+bg = screenRect("blue")
+sprite = screenCenter(scale(2.5 * percent, image("test.png")))
 
-sprite = screenCenter(square(200))
+fork animate 5s bg
 animate 5s sprite

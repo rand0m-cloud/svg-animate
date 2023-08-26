@@ -207,7 +207,7 @@ impl AnimationContext {
             AnimationContextValue::native(|_ctx, _args| todo!("load native fn")),
         );
         vars.insert(
-            "bounding_box".to_string(),
+            "boundingBox".to_string(),
             AnimationContextValue::native(|_ctx, args| {
                 let svg_arg = args[0].as_svg().unwrap();
 
@@ -244,8 +244,8 @@ impl AnimationContext {
             }),
         );
 
-        vars.insert("screen_width".to_string(), (config.width as f32).into());
-        vars.insert("screen_height".to_string(), (config.height as f32).into());
+        vars.insert("screenWidth".to_string(), (config.width as f32).into());
+        vars.insert("screenHeight".to_string(), (config.height as f32).into());
 
         let mut this = Self {
             vars,

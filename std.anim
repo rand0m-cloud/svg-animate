@@ -6,13 +6,29 @@ rotate(amt , tree) {
   return <g :transform="rotate(amt)"> {{ tree }} </g>
 }
 
+scale(amt, tree) {
+  return <g :transform="scale(amt)"> {{ tree }} </g>
+}
+
 center(svg) {
-  box = bounding_box(svg)
+  box = boundingBox(svg)
   x = -1 * (box.width/2)
   y = -1 * (box.height/2)
   return <g :transform="translate(x,y)"> {{ svg }} </g>
 }
 
 screenCenter(svg) {
-  return translate(screen_width/2, screen_height/2, center(svg))
+  return translate(screenWidth/2, screenHeight/2, center(svg))
+}
+
+image(url) {
+  return <image :href="url" />
+}
+
+imageWithSize(url, width, height) {
+  return <image :width="width" :height="height" :href="url" />
+}
+
+fullRect(color) {
+  return <rect width="100%" height="100%" :fill="color" />
 }
