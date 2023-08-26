@@ -5,4 +5,3 @@ fn main() {
     let args = Cli::parse();
     app_main(args);
 }
-

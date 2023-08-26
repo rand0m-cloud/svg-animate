@@ -4,7 +4,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use analysis::Animation;
+use analysis::{Animation, AnimationConfig};
 use clap::Parser;
 use parse::Parse;
 use resvg::{
@@ -67,6 +67,8 @@ pub fn app_main(args: Cli) {
         &size_str,
         "-i",
         "-",
+        "-vf",
+        "format=yuv420p",
         &output_str,
     ];
 
@@ -107,7 +109,13 @@ pub fn app_main(args: Cli) {
 }
 
 pub fn render_frame(current_time: f32, animation: &Animation, args: &Cli) -> Element {
-    let frame = animation.render(current_time);
+    let frame = animation.render(
+        current_time,
+        AnimationConfig {
+            width: args.width,
+            height: args.height,
+        },
+    );
     let mut svg = Element::new("svg");
     svg.assign("width", args.width);
     svg.assign("height", args.height);

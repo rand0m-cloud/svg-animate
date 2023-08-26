@@ -12,3 +12,7 @@ center(svg) {
   y = -1 * (box.height/2)
   return <g :transform="translate(x,y)"> {{ svg }} </g>
 }
+
+screenCenter(svg) {
+  return translate(screen_width/2, screen_height/2, center(svg))
+}

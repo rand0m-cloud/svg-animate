@@ -58,8 +58,8 @@ impl Animation {
         }
     }
 
-    pub fn render(&self, time: f32) -> Element {
-        AnimationContext::render(time, Animation::new(self.root.clone())).root
+    pub fn render(&self, time: f32, config: AnimationConfig) -> Element {
+        AnimationContext::render(time, Animation::new(self.root.clone()), config).root
     }
 }
 
@@ -174,6 +174,12 @@ impl AnimationContextValue {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct AnimationConfig {
+    pub width: u32,
+    pub height: u32,
+}
+
 #[derive(Debug)]
 pub struct AnimationContext {
     pub vars: HashMap<String, AnimationContextValue>,
@@ -181,10 +187,11 @@ pub struct AnimationContext {
     current_time: Duration,
     tracked_time: Duration,
     duration: Duration,
+    pub config: AnimationConfig,
 }
 
 impl AnimationContext {
-    pub fn render(time: f32, anim: Animation) -> Self {
+    pub fn render(time: f32, anim: Animation, config: AnimationConfig) -> Self {
         let mut vars = HashMap::new();
         vars.insert(
             "duration".to_string(),
@@ -237,12 +244,16 @@ impl AnimationContext {
             }),
         );
 
+        vars.insert("screen_width".to_string(), (config.width as f32).into());
+        vars.insert("screen_height".to_string(), (config.height as f32).into());
+
         let mut this = Self {
             vars,
             root: Element::new("g"),
             current_time: Duration::from_secs_f32(time),
             tracked_time: Duration::default(),
             duration: anim.duration,
+            config,
         };
 
         for d in anim.root.directives() {
@@ -388,6 +399,7 @@ impl AnimationContext {
 
                 let svg = anim.render(
                     (self.current_time - (self.tracked_time - anim.duration)).as_secs_f32(),
+                    self.config.clone(),
                 );
                 let output = if let Some(func) = &func {
                     let local_percent = (self.tracked_time.as_secs_f32()

@@ -4,6 +4,5 @@ square(size) {
   return <rect fill="green" stroke="blue" stroke-width="5px" :width="size" :height="size" />
 }
 
-sprite = rotate(720 * percent, center(square(100)))
-sprite = translate(100, 100, sprite)
+sprite = screenCenter(square(200))
 animate 5s sprite
