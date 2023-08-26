@@ -22,6 +22,7 @@ impl Animation {
 
 #[derive(Parse, Debug, Clone)]
 pub enum Directive {
+    Use(Use,Ident),
     Assign(Ident, Equals, Value),
     Func(
         Ident,

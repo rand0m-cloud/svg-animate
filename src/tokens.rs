@@ -47,5 +47,6 @@ tokens!(
     (Animate, "animate"),
     (Delay, "delay"),
     (Animation, "animation"),
-    (Play, "play")
+    (Play, "play"),
+    (Use, "use")
 );

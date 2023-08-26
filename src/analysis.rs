@@ -8,7 +8,7 @@ use svg::{node::element::Element, Node};
 
 use crate::{
     ast::{self, BinaryOperator, Directive, Value},
-    parse::Ident,
+    parse::{Ident, Parse},
 };
 
 #[derive(Clone, Debug)]
@@ -418,6 +418,13 @@ impl AnimationContext {
                     &name.as_str(),
                     AnimationContextValue::Animation(Animation::new(anim)),
                 );
+            }
+            Directive::Use(_, name) => {
+                let content = std::fs::read_to_string(format!("{}.anim", name.as_str())).unwrap();
+                let anim = ast::Animation::parse_from_str(&content).unwrap();
+                for directive in anim.directives() {
+                    self.evaluate_directive(directive);
+                }
             }
         };
         None
