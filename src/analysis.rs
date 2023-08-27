@@ -357,11 +357,13 @@ impl AnimationContext {
                     .clone();
 
                 let output = if let Some(func) = &def.func {
-                    let local_percent = (self.current_time.as_secs_f32()
+                    let mut local_percent = (self.current_time.as_secs_f32()
                         - self.tracked_time.as_secs_f32())
-                        / def.duration().as_secs_f32()
-                        * -1.0;
-                    let local_percent = 1.0 - local_percent;
+                        / def.duration().as_secs_f32();
+                    if !def.is_forked() {
+                        local_percent += 1.0
+                    }
+
                     match self.evaluate(func) {
                         AnimationContextValue::Abstraction(abs) => abs(
                             self,

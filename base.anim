@@ -1,7 +1,15 @@
 use std
 
-bg = fullRect("blue")
-sprite = screenCenter(scale(2.5 * percent, image("test.png")))
+first_slide = screenCenter(image("modpicking.png"))
+second_slide = screenCenter(image("modpig.png"))
 
-fork animate 5s bg
-animate 5s sprite
+animate 1s first_slide  fadeIn
+animate 1s first_slide
+fork animate 1s first_slide fadeOut
+
+animate 1s second_slide fadeIn
+animate 1s second_slide
+animate 1s second_slide fadeOut
+
+
+

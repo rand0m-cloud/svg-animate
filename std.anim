@@ -32,3 +32,12 @@ imageWithSize(url, width, height) {
 fullRect(color) {
   return <rect width="100%" height="100%" :fill="color" />
 }
+
+fadeIn(local_percent, tree) {
+  return <g :opacity="local_percent"> {{ tree }} </g>
+}
+
+fadeOut(local_percent, tree) {
+  amt = 1 - local_percent
+  return <g :opacity="amt"> {{ tree }} </g>
+}

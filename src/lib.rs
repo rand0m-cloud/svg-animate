@@ -41,6 +41,7 @@ pub struct Cli {
     #[arg(long, default_value = "60")]
     pub framerate: u32,
 
+    /// Makes ffmpeg quiet down
     #[arg(short)]
     pub quiet: bool,
 }
