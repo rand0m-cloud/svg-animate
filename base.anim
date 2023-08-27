@@ -1,6 +1,6 @@
 use std
 
-bg = screenRect("blue")
+bg = fullRect("blue")
 sprite = screenCenter(scale(2.5 * percent, image("test.png")))
 
 fork animate 5s bg
