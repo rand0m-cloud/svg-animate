@@ -1,15 +1,23 @@
 use std
 
+
+bg = fullRect("blue")
 first_slide = screenCenter(image("modpicking.png"))
 second_slide = screenCenter(image("modpig.png"))
 
-animate 1s first_slide  fadeIn
-animate 1s first_slide
-fork animate 1s first_slide fadeOut
+# forever
+fork animate bg
 
-animate 1s second_slide fadeIn
-animate 1s second_slide
-animate 1s second_slide fadeOut
+# until the next breakpoint
+animate 0.4s first_slide fadeIn
+animate first_slide
 
+break 2s
+animate 0.4s first_slide fadeOut
 
+animate 0.4s second_slide fadeIn
+animate second_slide
+
+break 4s
+animate 0.4s second_slide fadeOut
 

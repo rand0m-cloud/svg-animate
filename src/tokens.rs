@@ -8,9 +8,6 @@ macro_rules! tokens {
         #[derive(Debug, Clone, Parse, PartialEq)]
         pub struct $ty(#[token($token)] pub Token);
 
-        impl $ty {
-        }
-
         impl ToString for $ty {
             fn to_string(&self) -> String {
                 $token.to_string()
@@ -48,5 +45,6 @@ tokens!(
     (Delay, "delay"),
     (Animation, "animation"),
     (Play, "play"),
-    (Use, "use")
+    (Use, "use"),
+    (Break, "break")
 );

@@ -35,9 +35,10 @@ pub enum Directive {
     ),
     Value(Return, Value),
     Animate(AnimationDef),
-    Delay(Delay, NumberLiteral, DurationType),
+    Delay(Delay, DurationLiteral),
     Animation(tokens::Animation, Ident, OpenBrace, Animation, CloseBrace),
     Play(Option<Fork>, tokens::Play, Ident, Option<Value>),
+    Break(Break, DurationLiteral),
 }
 
 #[derive(Parse, Debug, Clone)]
@@ -53,18 +54,26 @@ impl DurationType {
 }
 
 #[derive(Parse, Debug, Clone)]
+pub struct DurationLiteral(NumberLiteral, DurationType);
+
+impl DurationLiteral {
+    pub fn duration(&self) -> Duration {
+        self.1.duration(self.0.as_f32())
+    }
+}
+
+#[derive(Parse, Debug, Clone)]
 pub struct AnimationDef {
     pub fork: Option<Fork>,
     pub animate: Animate,
-    pub duration: NumberLiteral,
-    pub duration_type: DurationType,
+    pub duration: Option<DurationLiteral>,
     pub sprite: Ident,
     pub func: Option<Value>,
 }
 
 impl AnimationDef {
-    pub fn duration(&self) -> Duration {
-        self.duration_type.duration(self.duration.as_f32())
+    pub fn duration(&self) -> Option<Duration> {
+        self.duration.as_ref().map(|dur| dur.duration())
     }
 
     pub fn is_forked(&self) -> bool {

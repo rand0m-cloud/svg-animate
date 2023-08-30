@@ -44,6 +44,10 @@ pub struct Cli {
     /// Makes ffmpeg quiet down
     #[arg(short)]
     pub quiet: bool,
+
+    /// Prints out rendered svgs
+    #[arg(long)]
+    pub debug_svg: bool,
 }
 
 pub fn app_main(args: Cli) {
@@ -90,6 +94,11 @@ pub fn app_main(args: Cli) {
 
     while time < anim.duration.as_secs_f32() {
         let frame = render_frame(time, &anim, &args);
+
+        if args.debug_svg {
+            println!("{frame}");
+        }
+
         time += 1.0 / args.framerate as f32;
 
         let mut image = Pixmap::new(args.width, args.height).unwrap();

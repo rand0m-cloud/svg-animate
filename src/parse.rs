@@ -123,6 +123,7 @@ impl Parse for Ident {
             "animation",
             "play",
             "use",
+            "break",
         ]
         .contains(&val)
         {

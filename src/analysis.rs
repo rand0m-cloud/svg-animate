@@ -11,10 +11,15 @@ use crate::{
     parse::{Ident, Parse},
 };
 
+fn find_breakpoint(breakpoints: &[Duration], time: Duration) -> Option<Duration> {
+    breakpoints.iter().find(|x| time < **x).cloned()
+}
+
 #[derive(Clone, Debug)]
 pub struct Animation {
     pub root: ast::Animation,
     pub duration: Duration,
+    pub breakpoints: Vec<Duration>,
 }
 
 impl Animation {
@@ -22,24 +27,32 @@ impl Animation {
         let mut linear_end = Duration::default();
         let mut forked_end = Duration::default();
         let mut animations = HashMap::new();
+        let mut breakpoints = vec![];
 
         for directive in root.directives() {
             if let Directive::Animation(_, name, _, anim, _) = directive {
                 animations.insert(name.as_str(), Animation::new(anim.clone()));
+            }
+            if let Directive::Break(_, literal) = directive {
+                breakpoints.push(literal.duration());
             }
         }
 
         for directive in root.directives() {
             match directive {
                 Directive::Animate(anim) => {
-                    if anim.fork.is_some() {
-                        forked_end = forked_end.max(linear_end + anim.duration());
-                    } else {
-                        linear_end += anim.duration()
+                    if let Some(dur) = anim.duration() {
+                        if anim.fork.is_some() {
+                            forked_end = forked_end.max(linear_end + dur);
+                        } else {
+                            linear_end += dur;
+                        }
+                    } else if anim.fork.is_none() {
+                        linear_end = find_breakpoint(&breakpoints, linear_end).unwrap();
                     }
                 }
-                Directive::Delay(_, int, unit) => {
-                    linear_end += unit.duration(int.as_f32());
+                Directive::Delay(_, duration) => {
+                    linear_end += duration.duration();
                 }
                 Directive::Play(fork, _, name, _) => {
                     let anim = animations.get(&name.as_str()).unwrap();
@@ -52,9 +65,11 @@ impl Animation {
                 _ => {}
             }
         }
+
         Animation {
             root,
             duration: linear_end.max(forked_end),
+            breakpoints,
         }
     }
 
@@ -184,6 +199,7 @@ pub struct AnimationConfig {
 pub struct AnimationContext {
     pub vars: HashMap<String, AnimationContextValue>,
     pub root: Element,
+    pub animation: Animation,
     current_time: Duration,
     tracked_time: Duration,
     duration: Duration,
@@ -253,6 +269,7 @@ impl AnimationContext {
             current_time: Duration::from_secs_f32(time),
             tracked_time: Duration::default(),
             duration: anim.duration,
+            animation: anim.clone(),
             config,
         };
 
@@ -327,22 +344,28 @@ impl AnimationContext {
                 };
                 self.set_var(&name.as_str(), func);
             }
-            Directive::Delay(_, int, unit) => {
-                self.tracked_time += unit.duration(int.as_f32());
+            Directive::Delay(_, duration) => {
+                self.tracked_time += duration.duration();
             }
             Directive::Animate(def) => {
                 if self.current_time < self.tracked_time {
                     return None;
                 }
 
-                if !def.is_forked() {
-                    self.tracked_time += def.duration();
+                if let Some(duration) = def.duration() {
+                    if !def.is_forked() {
+                        self.tracked_time += duration;
 
-                    if self.current_time > self.tracked_time {
+                        if self.current_time > self.tracked_time {
+                            return None;
+                        }
+                    } else if self.current_time > self.tracked_time + duration {
                         return None;
                     }
-                } else if self.current_time > self.tracked_time + def.duration() {
-                    return None;
+                } else if !def.is_forked() {
+                    if self.current_time > find_breakpoint(&self.animation.breakpoints, self.tracked_time).unwrap_or_default() {
+                        return None;
+                    }
                 }
 
                 let var = self.get_var(&def.sprite.as_str()).unwrap();
@@ -359,7 +382,7 @@ impl AnimationContext {
                 let output = if let Some(func) = &def.func {
                     let mut local_percent = (self.current_time.as_secs_f32()
                         - self.tracked_time.as_secs_f32())
-                        / def.duration().as_secs_f32();
+                        / def.duration().unwrap_or_default().as_secs_f32();
                     if !def.is_forked() {
                         local_percent += 1.0
                     }
@@ -439,6 +462,9 @@ impl AnimationContext {
                 for directive in anim.directives() {
                     self.evaluate_directive(directive);
                 }
+            }
+            Directive::Break(_, time) => {
+                self.tracked_time = std::cmp::max(self.tracked_time, time.duration());
             }
         };
         None
