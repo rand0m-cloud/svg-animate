@@ -13,6 +13,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                     height: 2160,
                     framerate: 60,
                     quiet: true,
+                    debug_svg: false,
                 })
             },
             criterion::BatchSize::PerIteration,
@@ -29,6 +30,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                     height: 320,
                     framerate: 30,
                     quiet: true,
+                    debug_svg: false,
                 })
             },
             criterion::BatchSize::PerIteration,
