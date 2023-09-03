@@ -103,6 +103,9 @@ pub enum BinaryOperator {
     Subtract(Minus),
     Add(Plus),
     Divide(Slash),
+    Equality(Equals, Equals),
+    GreaterThan(CloseAngle, Option<Equals>),
+    LessThan(OpenAngle, Option<Equals>),
 }
 
 impl Value {

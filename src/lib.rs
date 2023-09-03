@@ -20,7 +20,7 @@ mod lex;
 mod parse;
 mod tokens;
 
-#[derive(Parser)]
+#[derive(Parser, Default)]
 #[command(author, version, about, long_about = None)]
 pub struct Cli {
     /// Path to animation script
@@ -48,6 +48,10 @@ pub struct Cli {
     /// Prints out rendered svgs
     #[arg(long)]
     pub debug_svg: bool,
+
+    /// Renders a specific frame at given time
+    #[arg(long)]
+    pub render_frame: Option<f32>,
 }
 
 pub fn app_main(args: Cli) {
@@ -59,6 +63,15 @@ pub fn app_main(args: Cli) {
     let framerate_str = args.framerate.to_string();
     let size_str = format!("{}x{}", args.width, args.height);
     let output_str = args.output.display().to_string();
+
+    if let Some(time) = args.render_frame {
+        assert!(
+            time < anim.duration.as_secs_f32() && time > 0.0,
+            "can't render frame outside the animation's duration"
+        );
+        println!("{}", render_frame(time, &anim, &args));
+        return;
+    }
 
     let mut ffmpeg_args = vec![
         "-framerate",
@@ -92,6 +105,8 @@ pub fn app_main(args: Cli) {
     let mut frame_index = 0;
     let mut time = 0.0;
 
+    let mut image = Pixmap::new(args.width, args.height).unwrap();
+
     while time < anim.duration.as_secs_f32() {
         let frame = render_frame(time, &anim, &args);
 
@@ -101,7 +116,6 @@ pub fn app_main(args: Cli) {
 
         time += 1.0 / args.framerate as f32;
 
-        let mut image = Pixmap::new(args.width, args.height).unwrap();
         let usvg = usvg::Tree::from_str(&frame.to_string(), &usvg::Options::default()).unwrap();
         let svg = Tree::from_usvg(&usvg);
         svg.render(Transform::default(), &mut image.as_mut());

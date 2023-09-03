@@ -16,6 +16,9 @@ clap = { version = "4.3.23", features = ["derive"] }
 [profile.dev.package.resvg]
 opt-level = 3
 
+[profile.release]
+debug = true
+
 [dev-dependencies]
 criterion = "0.3"
 

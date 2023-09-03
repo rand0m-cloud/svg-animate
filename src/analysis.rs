@@ -1,7 +1,7 @@
 use std::{collections::HashMap, rc::Rc, time::Duration};
 
 use resvg::{
-    usvg::{self, Rect, TreeParsing},
+    usvg::{self, Rect, Size, TreeParsing},
     Tree,
 };
 use svg::{node::element::Element, Node};
@@ -13,6 +13,10 @@ use crate::{
 
 fn find_breakpoint(breakpoints: &[Duration], time: Duration) -> Option<Duration> {
     breakpoints.iter().find(|x| time < **x).cloned()
+}
+
+fn find_breakpoint_rev(breakpoints: &[Duration], time: Duration) -> Option<Duration> {
+    breakpoints.iter().rev().find(|x| time > **x).cloned()
 }
 
 #[derive(Clone, Debug)]
@@ -47,8 +51,6 @@ impl Animation {
                         } else {
                             linear_end += dur;
                         }
-                    } else if anim.fork.is_none() {
-                        linear_end = find_breakpoint(&breakpoints, linear_end).unwrap();
                     }
                 }
                 Directive::Delay(_, duration) => {
@@ -61,6 +63,15 @@ impl Animation {
                     } else {
                         linear_end += anim.duration
                     }
+                }
+                Directive::Break(_, duration) => {
+                    assert!(
+                        duration.duration() >= linear_end,
+                        "invalid breakpoint {:?}, check the timeline ({:?})",
+                        duration.duration(),
+                        linear_end
+                    );
+                    linear_end = duration.duration();
                 }
                 _ => {}
             }
@@ -98,6 +109,21 @@ pub enum AnimationContextValue {
     ),
     Animation(Animation),
     Object(HashMap<String, AnimationContextValue>),
+    Bool(bool),
+}
+
+impl Eq for AnimationContextValue {}
+
+impl PartialEq for AnimationContextValue {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Number(l0), Self::Number(r0)) => l0 == r0,
+            (Self::String(l0), Self::String(r0)) => l0 == r0,
+            (Self::Object(l0), Self::Object(r0)) => l0 == r0,
+            (Self::Bool(l0), Self::Bool(r0)) => l0 == r0,
+            _ => false,
+        }
+    }
 }
 
 impl std::fmt::Debug for AnimationContextValue {
@@ -111,6 +137,7 @@ impl std::fmt::Debug for AnimationContextValue {
             Self::Native(_) => f.debug_tuple("Native").finish(),
             Self::Abstraction(_) => f.debug_tuple("Abstraction").finish(),
             Self::Animation(anim) => f.debug_tuple("Animation").field(anim).finish(),
+            Self::Bool(b) => f.debug_tuple("Bool").field(b).finish(),
         }
     }
 }
@@ -151,6 +178,14 @@ impl AnimationContextValue {
             None
         }
     }
+
+    pub fn as_bool(&self) -> Option<&bool> {
+        if let Self::Bool(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
 }
 
 impl From<String> for AnimationContextValue {
@@ -168,6 +203,12 @@ impl From<f32> for AnimationContextValue {
 impl From<Element> for AnimationContextValue {
     fn from(v: Element) -> Self {
         Self::Svg(v)
+    }
+}
+
+impl From<bool> for AnimationContextValue {
+    fn from(v: bool) -> Self {
+        Self::Bool(v)
     }
 }
 
@@ -233,20 +274,12 @@ impl AnimationContext {
 
                 let usvg =
                     usvg::Tree::from_str(&svg.to_string(), &usvg::Options::default()).unwrap();
-                let tree = Tree::from_usvg(&usvg);
-                let rect = tree
-                    .content_area
-                    .unwrap_or_else(|| Rect::from_xywh(0.00, 0.0, 0.0, 0.0).unwrap());
+                let rect = usvg.size;
 
-                let fields = [
-                    ("x", rect.x()),
-                    ("y", rect.y()),
-                    ("width", rect.width()),
-                    ("height", rect.height()),
-                ]
-                .iter()
-                .map(|(k, v)| (k.to_string(), (*v).into()))
-                .collect::<HashMap<_, AnimationContextValue>>();
+                let fields = [("width", rect.width()), ("height", rect.height())]
+                    .iter()
+                    .map(|(k, v)| (k.to_string(), (*v).into()))
+                    .collect::<HashMap<_, AnimationContextValue>>();
 
                 AnimationContextValue::Object(fields)
             }),
@@ -362,10 +395,12 @@ impl AnimationContext {
                     } else if self.current_time > self.tracked_time + duration {
                         return None;
                     }
-                } else if !def.is_forked() {
-                    if self.current_time > find_breakpoint(&self.animation.breakpoints, self.tracked_time).unwrap_or_default() {
-                        return None;
-                    }
+                } else if !def.is_forked()
+                    && self.current_time
+                        > find_breakpoint(&self.animation.breakpoints, self.tracked_time)
+                            .unwrap_or_default()
+                {
+                    return None;
                 }
 
                 let var = self.get_var(&def.sprite.as_str()).unwrap();
@@ -380,11 +415,23 @@ impl AnimationContext {
                     .clone();
 
                 let output = if let Some(func) = &def.func {
-                    let mut local_percent = (self.current_time.as_secs_f32()
-                        - self.tracked_time.as_secs_f32())
-                        / def.duration().unwrap_or_default().as_secs_f32();
-                    if !def.is_forked() {
-                        local_percent += 1.0
+                    let (anim_duration, end_time) = if let Some(dur) = def.duration() {
+                        (dur, self.tracked_time)
+                    } else if !def.is_forked() {
+                        let end = find_breakpoint(&self.animation.breakpoints, self.current_time)
+                            .unwrap();
+                        let begin =
+                            find_breakpoint_rev(&self.animation.breakpoints, self.current_time)
+                                .unwrap_or_default();
+                        (end - begin, end)
+                    } else {
+                        (self.animation.duration, self.animation.duration)
+                    };
+                    let local_percent = (end_time.as_secs_f32() - self.current_time.as_secs_f32())
+                        / anim_duration.as_secs_f32();
+                    let mut local_percent = 1.0 - local_percent;
+                    if def.is_forked() && def.duration().is_some() {
+                        local_percent -= 1.0;
                     }
 
                     match self.evaluate(func) {
@@ -508,6 +555,27 @@ impl AnimationContext {
                     }
                     BinaryOperator::Divide(_) => {
                         (left.as_number().unwrap() / right.as_number().unwrap()).into()
+                    }
+                    BinaryOperator::Equality(_, _) => (left == right).into(),
+                    BinaryOperator::GreaterThan(_, eq) => {
+                        let left = left.as_number().unwrap();
+                        let right = right.as_number().unwrap();
+                        if eq.is_some() {
+                            left >= right
+                        } else {
+                            left > right
+                        }
+                        .into()
+                    }
+                    BinaryOperator::LessThan(_, eq) => {
+                        let left = left.as_number().unwrap();
+                        let right = right.as_number().unwrap();
+                        if eq.is_some() {
+                            left <= right
+                        } else {
+                            left < right
+                        }
+                        .into()
                     }
                 }
             }
