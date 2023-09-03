@@ -1,8 +1,7 @@
 use std::{collections::HashMap, rc::Rc, time::Duration};
 
 use resvg::{
-    usvg::{self, Rect, Size, TreeParsing},
-    Tree,
+    usvg::{self,  TreeParsing},
 };
 use svg::{node::element::Element, Node};
 

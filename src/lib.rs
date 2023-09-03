@@ -8,7 +8,7 @@ use analysis::{Animation, AnimationConfig};
 use clap::Parser;
 use parse::Parse;
 use resvg::{
-    tiny_skia::Pixmap,
+    tiny_skia::{Pixmap, Color},
     usvg::{self, Transform, TreeParsing},
     Tree,
 };
@@ -122,6 +122,8 @@ pub fn app_main(args: Cli) {
 
         frame_index += 1;
         stdin.write_all(image.data()).unwrap();
+
+        image.fill(Color::TRANSPARENT);
     }
 
     if frame_index == 0 {

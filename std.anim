@@ -18,7 +18,11 @@ center(svg) {
 }
 
 screenCenter(svg) {
-  return translate(screenWidth/2, screenHeight/2, center(svg))
+  return translateScreenCenter(center(svg))
+}
+
+translateScreenCenter(svg) {
+  return translate(screenWidth/2, screenHeight/2, svg)
 }
 
 image(url) {
