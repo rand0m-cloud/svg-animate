@@ -1,0 +1,32 @@
+use std
+
+white = fullRect("white")
+bg = fullRect("#71c7ec")
+
+code_sample = screenCenter(image("codesample1.png"))
+code_sample2 = screenCenter(image("codesample2.png"))
+
+fork animate white
+animate bg fadeIn
+break 1s
+
+fork animate bg
+
+delay 1s
+
+animate 0.4s code_sample fadeIn
+animate code_sample
+break 10s
+animate 0.4s code_sample fadeOut
+
+delay 5s
+
+animate 0.4s code_sample2 fadeIn
+animate code_sample2
+break 20s
+animate 0.4s code_sample2 fadeOut
+
+delay 1s
+
+
+
