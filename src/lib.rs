@@ -51,10 +51,10 @@ mod wasi;
 pub use wasi::app_main;
 
 #[cfg(not(target_arch = "wasm32"))]
-mod pc;
+mod desktop;
 
 #[cfg(not(target_arch = "wasm32"))]
-pub use pc::app_main;
+pub use desktop::app_main;
 
 pub fn render_frame(current_time: f32, animation: &Animation, args: &Cli) -> Element {
     let frame = animation.render(
