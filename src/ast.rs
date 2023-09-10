@@ -215,7 +215,7 @@ impl SvgLiteral {
                                         Value::Str(s)=>s.get_inner_str().to_string(),
                                             _=> panic!("svg formatting can only handle vars, numbers, and strings")
                                     };
-                                    make_string(ctx.get_var(&arg).unwrap())
+                                    make_string(ctx.vars.get_var(&arg).unwrap())
                                 })
                                 .collect::<Vec<_>>();
                             format!(
@@ -225,7 +225,7 @@ impl SvgLiteral {
                             )
                         }
                         Value::Variable(ident) => {
-                            let value = ctx.get_var(&ident.as_str()).unwrap_or_else(|| {
+                            let value = ctx.vars.get_var(&ident.as_str()).unwrap_or_else(|| {
                                 panic!("failed to find variable: {}", ident.as_str())
                             });
 

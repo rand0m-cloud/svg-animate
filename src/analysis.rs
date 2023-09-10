@@ -233,9 +233,38 @@ pub struct AnimationConfig {
     pub height: u32,
 }
 
+#[derive(Debug, Default)]
+pub struct Variables(Vec<HashMap<String, AnimationContextValue>>);
+
+impl Variables {
+    pub fn get_var(&self, name: &str) -> Option<AnimationContextValue> {
+        for i in self.0.iter().rev() {
+            if let Some(val) = i.get(name) {
+                return Some(val.clone());
+            }
+        }
+        None
+    }
+
+    pub fn set_var(&mut self, name: &str, val: impl Into<AnimationContextValue>) {
+        self.0
+            .last_mut()
+            .unwrap()
+            .insert(name.to_string(), val.into());
+    }
+
+    pub fn enter_scope(&mut self) {
+        self.0.push(Default::default());
+    }
+
+    pub fn exit_scope(&mut self) {
+        self.0.pop().unwrap();
+    }
+}
+
 #[derive(Debug)]
 pub struct AnimationContext {
-    pub vars: HashMap<String, AnimationContextValue>,
+    pub vars: Variables,
     pub root: Element,
     pub animation: Animation,
     current_time: Duration,
@@ -246,22 +275,13 @@ pub struct AnimationContext {
 
 impl AnimationContext {
     pub fn render(time: f32, anim: Animation, config: AnimationConfig) -> Self {
-        let mut vars = HashMap::new();
-        vars.insert(
-            "duration".to_string(),
-            AnimationContextValue::Number(anim.duration.as_secs_f32()),
-        );
-        vars.insert("time".to_string(), AnimationContextValue::Number(time));
-        vars.insert(
-            "percent".to_string(),
-            AnimationContextValue::Number(time / anim.duration.as_secs_f32()),
-        );
-        vars.insert(
-            "load".to_string(),
-            AnimationContextValue::native(|_ctx, _args| todo!("load native fn")),
-        );
-        vars.insert(
-            "boundingBox".to_string(),
+        let mut vars = Variables::default();
+        vars.enter_scope();
+        vars.set_var("duration", anim.duration.as_secs_f32());
+        vars.set_var("time", time);
+        vars.set_var("percent", time / anim.duration.as_secs_f32());
+        vars.set_var(
+            "boundingBox",
             AnimationContextValue::native(|_ctx, args| {
                 let svg_arg = args[0].as_svg().unwrap();
 
@@ -282,16 +302,16 @@ impl AnimationContext {
             }),
         );
 
-        vars.insert(
-            "debug".to_string(),
+        vars.set_var(
+            "debug",
             AnimationContextValue::native(|_ctx, args| {
                 println!("{:?}", args);
                 AnimationContextValue::null()
             }),
         );
 
-        vars.insert("screenWidth".to_string(), (config.width as f32).into());
-        vars.insert("screenHeight".to_string(), (config.height as f32).into());
+        vars.set_var("screenWidth", config.width as f32);
+        vars.set_var("screenHeight", config.height as f32);
 
         let mut this = Self {
             vars,
@@ -313,20 +333,12 @@ impl AnimationContext {
         this
     }
 
-    pub fn get_var(&self, value: &str) -> Option<AnimationContextValue> {
-        self.vars.get(value).cloned()
-    }
-
-    pub fn set_var(&mut self, var: &str, value: impl Into<AnimationContextValue>) {
-        self.vars.insert(var.to_string(), value.into());
-    }
-
     fn evaluate_directive(&mut self, directive: &Directive) -> Option<AnimationContextValue> {
         let directive = directive.clone();
         match directive {
             Directive::Assign(ident, _, val) => {
                 let val = self.evaluate(&val);
-                self.set_var(&ident.as_str(), val);
+                self.vars.set_var(&ident.as_str(), val);
             }
             Directive::Value(_, value) => {
                 return Some(self.evaluate(&value));
@@ -345,7 +357,7 @@ impl AnimationContext {
                                 let directives = directives.clone();
                                 move |ctx: &mut AnimationContext, args: Vec<AnimationContextValue>| {
                                     for (i, arg) in func_args.iter().enumerate() {
-                                        ctx.set_var(&arg.as_str(), args[i].clone());
+                                        ctx.vars.set_var(&arg.as_str(), args[i].clone());
                                     }
                                     directives
                                         .iter()
@@ -372,7 +384,7 @@ impl AnimationContext {
                         curry(Rc::from(&*func_args.0), args, Rc::from(&*directives.0), ctx)
                     })
                 };
-                self.set_var(&name.as_str(), func);
+                self.vars.set_var(&name.as_str(), func);
             }
             Directive::Delay(_, duration) => {
                 self.tracked_time += duration.duration();
@@ -400,7 +412,7 @@ impl AnimationContext {
                     return None;
                 }
 
-                let var = self.get_var(&def.sprite.as_str()).unwrap();
+                let var = self.vars.get_var(&def.sprite.as_str()).unwrap();
                 let svg = var
                     .as_svg()
                     .unwrap_or_else(|| {
@@ -450,7 +462,7 @@ impl AnimationContext {
                 self.root.append(output);
             }
             Directive::Play(fork, _, name, func) => {
-                let val = self.get_var(&name.as_str()).unwrap();
+                let val = self.vars.get_var(&name.as_str()).unwrap();
                 let anim = val.as_animation().unwrap();
                 if self.current_time < self.tracked_time {
                     return None;
@@ -495,7 +507,7 @@ impl AnimationContext {
                 self.root.append(output);
             }
             Directive::Animation(_, name, _, anim, _) => {
-                self.set_var(
+                self.vars.set_var(
                     &name.as_str(),
                     AnimationContextValue::Animation(Animation::new(anim)),
                 );
@@ -518,6 +530,7 @@ impl AnimationContext {
         match value {
             Value::Number(i) => i.as_f32().into(),
             Value::Variable(ident) => self
+                .vars
                 .get_var(&ident.as_str())
                 .unwrap_or_else(|| panic!("expected variable {} to exist", ident.as_str())),
             Value::Null(_) => AnimationContextValue::null(),

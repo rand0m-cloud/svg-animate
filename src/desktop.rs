@@ -3,11 +3,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use crate::{
-    analysis::{Animation} ,
-    parse::Parse,
-    Cli, ast, render_frame,
-};
+use crate::{analysis::Animation, ast, parse::Parse, render_frame, Cli};
 use resvg::{
     tiny_skia::{Color, Pixmap},
     usvg::{self, Transform, TreeParsing},
