@@ -1,0 +1,21 @@
+fadeIn {
+  local_percent = arg 0
+  tree = arg 1
+  element = svg_new g
+  svg_assign opacity local_percent
+  svg_append element tree
+  return element
+}
+
+fadeInTest {
+  time = arg 0
+  tree = arg 1
+  play time tree fadeIn
+  play time tree fadeIn
+}
+
+main {
+  element = svg_new g
+  _0 = 1s
+  _1 = call fadeInTest [_0, element]
+}

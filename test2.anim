@@ -1,0 +1,10 @@
+fadeIn(local_percent, tree) {
+  return <g :opacity="local_percent"> {{ tree }} </g>
+}
+
+fadeInTest(time, tree) {
+  animate time tree fadeIn
+  animate time tree fadeIn
+}
+
+fadeInTest(1s, <g />)

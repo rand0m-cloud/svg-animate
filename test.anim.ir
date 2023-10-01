@@ -1,0 +1,32 @@
+test {
+  a = arg 0
+  element = svg_new rect
+  fill_ = "red"
+  svg_assign width a
+  svg_assign height a
+  svg_assign fill fill_
+  return element
+}
+
+fadeIn {
+  local_percent = arg 0
+  tree = arg 1
+  element = svg_new g
+  svg_assign opacity local_percent
+  svg_append element tree
+  return element
+}
+
+main {
+  # line 1
+  _0 = 200
+  _1 = 1s
+  element0 = call test [_0]
+  play _1 element0 fadeIn
+
+  # line 2
+  _2 = 500
+  _3 = 1s
+  element1 = call test [_2]
+  play _3 element1 fadeIn
+}

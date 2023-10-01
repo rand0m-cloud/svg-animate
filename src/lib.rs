@@ -1,5 +1,6 @@
 mod analysis;
 mod ast;
+mod ir;
 mod lex;
 mod parse;
 mod tokens;
@@ -42,6 +43,7 @@ use std::path::PathBuf;
 
 use analysis::{Animation, AnimationConfig};
 use clap::Parser;
+use ir::IR;
 use svg::{node::element::Element, Node};
 
 #[cfg(target_arch = "wasm32")]

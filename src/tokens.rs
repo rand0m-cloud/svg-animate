@@ -46,5 +46,10 @@ tokens!(
     (Animation, "animation"),
     (Play, "play"),
     (Use, "use"),
-    (Break, "break")
+    (Break, "break"),
+    (Arg, "arg"),
+    (SvgAssign, "svg_assign"),
+    (SvgNew, "svg_new"),
+    (SvgAppend, "svg_append"),
+    (Call, "call")
 );
