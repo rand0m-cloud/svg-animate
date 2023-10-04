@@ -566,27 +566,6 @@ impl AnimationContext {
                     BinaryOperator::Divide(_) => {
                         (left.as_number().unwrap() / right.as_number().unwrap()).into()
                     }
-                    BinaryOperator::Equality(_, _) => (left == right).into(),
-                    BinaryOperator::GreaterThan(_, eq) => {
-                        let left = left.as_number().unwrap();
-                        let right = right.as_number().unwrap();
-                        if eq.is_some() {
-                            left >= right
-                        } else {
-                            left > right
-                        }
-                        .into()
-                    }
-                    BinaryOperator::LessThan(_, eq) => {
-                        let left = left.as_number().unwrap();
-                        let right = right.as_number().unwrap();
-                        if eq.is_some() {
-                            left <= right
-                        } else {
-                            left < right
-                        }
-                        .into()
-                    }
                 }
             }
             Value::DotField(val, _, name) => {

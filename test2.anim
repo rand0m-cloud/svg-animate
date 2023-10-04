@@ -1,3 +1,7 @@
+test(a) {
+  return <rect :width="a" :height="a" fill="red" />
+}
+
 fadeIn(local_percent, tree) {
   return <g :opacity="local_percent"> {{ tree }} </g>
 }
@@ -7,4 +11,4 @@ fadeInTest(time, tree) {
   animate time tree fadeIn
 }
 
-fadeInTest(1s, <g />)
+fadeInTest(1s, test(100))

@@ -1,21 +1,51 @@
+image {
+  url = arg 0
+  element = svg_new image
+  svg_assign element "href" url
+  return element
+}
+
+test {
+  a = arg 0
+  fill_ = arg 1
+  element = svg_new rect
+  svg_assign element "width" a
+  svg_assign element "height" a
+  svg_assign element "fill" fill_
+  return element
+}
+
 fadeIn {
   local_percent = arg 0
   tree = arg 1
   element = svg_new g
-  svg_assign opacity local_percent
+  svg_assign element "opacity" local_percent
   svg_append element tree
   return element
 }
 
-fadeInTest {
+fadeOut {
+  local_percent = arg 0
+  tree = arg 1
+  _0 = 1.0
+  _1 = _0 - local_percent
+  element = svg_new g
+  svg_assign element "opacity" _1
+  svg_append element tree
+  return element
+}
+
+fadeTest {
   time = arg 0
   tree = arg 1
-  play time tree fadeIn
-  play time tree fadeIn
+  play time tree [fadeIn]
+  play time tree [fadeOut]
 }
 
 main {
-  element = svg_new g
-  _0 = 1s
-  _1 = call fadeInTest [_0, element]
+  _0 = "test.png"
+  _1 = call image [_0]
+
+  _3 = 10s
+  _4 = call fadeTest [_3, _1]
 }

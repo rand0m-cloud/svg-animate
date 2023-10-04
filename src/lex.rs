@@ -1,6 +1,6 @@
 use nom::{
     branch::alt,
-    bytes::complete::{is_not, tag},
+    bytes::complete::{is_not, tag, take_till},
     character::complete::{digit1, multispace0, one_of},
     combinator::{all_consuming, map, recognize, value},
     multi::many1,
@@ -15,7 +15,7 @@ pub fn lex(input: &str) -> Vec<Token> {
     let res: IResult<&str, Vec<Option<Token>>> = all_consuming(many1(delimited(
         multispace0,
         alt((
-            value(None, pair(tag("#"), is_not("\r\n"))),
+            value(None, pair(tag("#"), take_till(|c| c == '\r' || c == '\n'))),
             map(
                 alt((
                     recognize(delimited(tag("\""), is_not("\""), tag("\""))),

@@ -1,5 +1,3 @@
-mod analysis;
-mod ast;
 mod ir;
 mod lex;
 mod parse;
@@ -39,38 +37,83 @@ pub struct Cli {
     pub render_frame: Option<f32>,
 }
 
-use std::path::PathBuf;
+use std::{
+    io::Write,
+    path::PathBuf,
+    process::{Child, ChildStdin, Command, Stdio},
+};
 
-use analysis::{Animation, AnimationConfig};
 use clap::Parser;
 use ir::IR;
-use svg::{node::element::Element, Node};
+use parse::Parse;
+use resvg::tiny_skia::PixmapRef;
 
-#[cfg(target_arch = "wasm32")]
-mod wasi;
+use crate::ir::IRContext;
 
-#[cfg(target_arch = "wasm32")]
-pub use wasi::app_main;
+pub fn app_main(args: Cli) {
+    let ir_source = std::fs::read_to_string(&args.input).unwrap();
+    let ir = IR::parse_from_str(&ir_source).expect("IR source to parse");
 
-#[cfg(not(target_arch = "wasm32"))]
-mod desktop;
+    let mut ffmpeg = FfmpegHandle::new(&args);
 
-#[cfg(not(target_arch = "wasm32"))]
-pub use desktop::app_main;
-
-pub fn render_frame(current_time: f32, animation: &Animation, args: &Cli) -> Element {
-    let frame = animation.render(
-        current_time,
-        AnimationConfig {
-            width: args.width,
-            height: args.height,
+    let mut ctx = IRContext::new(
+        ir,
+        args.framerate as f32,
+        (args.width, args.height),
+        move |buf| {
+            ffmpeg.push_image(buf);
         },
     );
-    let mut svg = Element::new("svg");
-    svg.assign("width", args.width);
-    svg.assign("height", args.height);
-    svg.assign("xmlns", "http://www.w3.org/2000/svg");
-    svg.assign("render_time", current_time);
-    svg.append(frame);
-    svg
+    ctx.evaluate("main", &[]);
+}
+
+pub struct FfmpegHandle(Child, Option<ChildStdin>);
+
+impl FfmpegHandle {
+    pub fn new(args: &Cli) -> Self {
+        let framerate_str = args.framerate.to_string();
+        let size_str = format!("{}x{}", args.width, args.height);
+        let output_str = args.output.display().to_string();
+
+        let mut ffmpeg_args = vec![
+            "-framerate",
+            &framerate_str,
+            "-y",
+            "-f",
+            "rawvideo",
+            "-pixel_format",
+            "rgba",
+            "-video_size",
+            &size_str,
+            "-i",
+            "-",
+            "-vf",
+            "format=yuv420p",
+            &output_str,
+        ];
+
+        if args.quiet {
+            ffmpeg_args.extend(["-loglevel", "panic"]);
+        }
+
+        let mut ffmpeg = Command::new("ffmpeg")
+            .args(ffmpeg_args)
+            .stdin(Stdio::piped())
+            .spawn()
+            .expect("ffmpeg command to work");
+
+        let stdin = ffmpeg.stdin.take().unwrap();
+        Self(ffmpeg, Some(stdin))
+    }
+
+    pub fn push_image(&mut self, buf: PixmapRef) {
+        self.1.as_mut().unwrap().write_all(buf.data()).unwrap();
+    }
+}
+
+impl Drop for FfmpegHandle {
+    fn drop(&mut self) {
+        drop(self.1.take().unwrap());
+        self.0.wait().unwrap();
+    }
 }

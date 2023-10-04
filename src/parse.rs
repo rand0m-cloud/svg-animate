@@ -84,11 +84,21 @@ impl<T: Parse> Parse for Box<T> {
         Some((input, Box::new(t)))
     }
 }
+
 impl<T1: Parse, T2: Parse> Parse for (T1, T2) {
     fn parse(input: &[Token]) -> Option<(&[Token], Self)> {
         let (input, t1) = Parse::parse(input)?;
         let (input, t2) = Parse::parse(input)?;
         Some((input, (t1, t2)))
+    }
+}
+
+impl<T1: Parse, T2: Parse, T3: Parse> Parse for (T1, T2, T3) {
+    fn parse(input: &[Token]) -> Option<(&[Token], Self)> {
+        let (input, t1) = Parse::parse(input)?;
+        let (input, t2) = Parse::parse(input)?;
+        let (input, t3) = Parse::parse(input)?;
+        Some((input, (t1, t2, t3)))
     }
 }
 
