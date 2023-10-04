@@ -48,6 +48,14 @@ pub enum IRValue {
     Number(NumberLiteral),
     Str(StrLiteral),
     BinaryOp(Ident, BinaryOperator, Ident),
+    Intrinsic(
+        Intrinsic,
+        Ident,
+        OpenSquareBracket,
+        Punctated0<Ident, Comma>,
+        CloseSquareBracket,
+    ),
+    GetField(GetField, Ident, Ident),
 }
 
 #[derive(Parse, Debug, Clone)]
@@ -92,6 +100,7 @@ pub struct IRContext {
 
 pub struct Layer {
     base: Option<Element>,
+    #[allow(clippy::type_complexity)]
     modifier: Option<Box<dyn FnMut(&mut IRContext, Element) -> Element>>,
 }
 
@@ -146,8 +155,7 @@ impl IRContext {
         let mut layers = mem::take(&mut self.layers);
         let layers_to_render = layers
             .iter_mut()
-            .map(|x| x.get(self))
-            .flatten()
+            .flat_map(|x| x.get(self))
             .collect::<Vec<_>>();
         self.layers = layers;
 
@@ -187,7 +195,7 @@ impl IRContext {
             .cloned()
             .unwrap();
 
-        for stmt in block.body.0.clone() {
+        for stmt in block.body.0 {
             match stmt {
                 IRStatement::Assign(name, _, val) => {
                     let val = self.evaulate_val(&val, args);
@@ -297,15 +305,74 @@ impl IRContext {
                     .unwrap_or(IRContextValue::Null)
             }
             IRValue::BinaryOp(left, op, right) => {
-                let left = *self.vars.get(&left.as_str()).unwrap().as_number().unwrap();
-                let right = *self.vars.get(&right.as_str()).unwrap().as_number().unwrap();
-                IRContextValue::Number(match op {
-                    BinaryOperator::Add(_) => left + right,
-                    BinaryOperator::Divide(_) => left / right,
-                    BinaryOperator::Subtract(_) => left - right,
-                    BinaryOperator::Multiply(_) => left * right,
-                })
+                let left = self.vars.get(&left.as_str()).unwrap();
+                let right = self.vars.get(&right.as_str()).unwrap();
+                match (left, right) {
+                    (IRContextValue::Number(left), IRContextValue::Number(right)) => {
+                        IRContextValue::Number(match op {
+                            BinaryOperator::Add(_) => left + right,
+                            BinaryOperator::Divide(_) => left / right,
+                            BinaryOperator::Subtract(_) => left - right,
+                            BinaryOperator::Multiply(_) => left * right,
+                        })
+                    }
+                    (IRContextValue::Str(left), right) => {
+                        IRContextValue::Str(left.clone() + &right.as_svg_val().unwrap())
+                    }
+                    (left, right) => {
+                        todo!("unknown binary operation on {:?} and {:?}", left, right)
+                    }
+                }
             }
+            IRValue::Intrinsic(_, name, _, args, _) => {
+                let args = args
+                    .0
+                    .iter()
+                    .map(|x| self.vars.get(&x.as_str()).unwrap().clone())
+                    .collect::<Vec<_>>();
+                self.run_intrinsic(&name.as_str(), &args)
+            }
+            IRValue::GetField(_, obj, field) => {
+                let obj_as_val = self.vars.get(&obj.as_str()).unwrap();
+                let obj = obj_as_val.as_object().unwrap_or_else(|| {
+                    panic!("{} wasn't an object ({:?})", obj.as_str(), obj_as_val)
+                });
+                obj.get(&field.as_str())
+                    .unwrap_or_else(|| {
+                        panic!("{:?} didn't have field {}", obj_as_val, field.as_str())
+                    })
+                    .clone()
+            }
+        }
+    }
+
+    fn run_intrinsic(&self, name: &str, args: &[IRContextValue]) -> IRContextValue {
+        match name {
+            "boundingBox" => {
+                let svg = args[0].as_svg().unwrap();
+
+                let mut svg_tree = Element::new("svg");
+                svg_tree.append(svg.clone());
+                svg_tree.assign("xmlns", "http://www.w3.org/2000/svg");
+
+                let tree =
+                    usvg::Tree::from_str(&svg_tree.to_string(), &Options::default()).unwrap();
+                let width = tree.size.width();
+                let height = tree.size.height();
+                IRContextValue::Object(
+                    [
+                        ("height".to_string(), IRContextValue::Number(height)),
+                        ("width".to_string(), IRContextValue::Number(width)),
+                    ]
+                    .into_iter()
+                    .collect(),
+                )
+            }
+            "debug" => {
+                println!("{:?}", args);
+                IRContextValue::Null
+            }
+            x => todo!("unknown intrinsic {x}"),
         }
     }
 }
@@ -316,6 +383,7 @@ pub enum IRContextValue {
     Number(f32),
     Svg(Element),
     Str(String),
+    Object(HashMap<String, IRContextValue>),
     Null,
 }
 
@@ -352,8 +420,8 @@ impl IRContextValue {
         }
     }
 
-    pub fn as_number(&self) -> Option<&f32> {
-        if let Self::Number(v) = self {
+    pub fn as_object(&self) -> Option<&HashMap<String, IRContextValue>> {
+        if let Self::Object(v) = self {
             Some(v)
         } else {
             None

@@ -51,5 +51,7 @@ tokens!(
     (SvgAssign, "svg_assign"),
     (SvgNew, "svg_new"),
     (SvgAppend, "svg_append"),
-    (Call, "call")
+    (Call, "call"),
+    (Intrinsic, "intrinsic"),
+    (GetField, "getfield"),
 );
