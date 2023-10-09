@@ -9,13 +9,13 @@ use svg::{node::element::Element, Node};
 use crate::{parse::*, tokens::*};
 
 #[derive(Debug, Parse)]
-pub struct IR(Many1<IRBlock>);
+pub struct IR(Many0<IRBlock>);
 
 #[derive(Debug, Parse, Clone)]
 pub struct IRBlock {
     name: Ident,
     _open: OpenBrace,
-    body: Many1<IRStatement>,
+    body: Many0<IRStatement>,
     _close: CloseBrace,
 }
 
@@ -23,6 +23,7 @@ pub struct IRBlock {
 pub enum IRStatement {
     SvgAssign(SvgAssign, Ident, StrLiteral, Ident),
     SvgAppend(SvgAppend, Ident, Ident),
+    Fork(Fork, Ident, Ident),
     Play(
         Play,
         Ident,
@@ -56,6 +57,8 @@ pub enum IRValue {
         CloseSquareBracket,
     ),
     GetField(GetField, Ident, Ident),
+    Variable(Ident),
+    Null(Null),
 }
 
 #[derive(Parse, Debug, Clone)]
@@ -66,9 +69,28 @@ pub enum BinaryOperator {
     Divide(Slash),
 }
 
+impl std::fmt::Display for BinaryOperator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Multiply(_) => f.write_str("*"),
+            Self::Subtract(_) => f.write_str("-"),
+            Self::Add(_) => f.write_str("+"),
+            Self::Divide(_) => f.write_str("/"),
+        }
+    }
+}
+
 #[derive(Parse, Debug, Clone)]
 pub enum DurationType {
     Seconds(S),
+}
+
+impl std::fmt::Display for DurationType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Seconds(_) => f.write_str("s"),
+        }
+    }
 }
 
 impl DurationType {
@@ -80,7 +102,7 @@ impl DurationType {
 }
 
 #[derive(Parse, Debug, Clone)]
-pub struct DurationLiteral(NumberLiteral, DurationType);
+pub struct DurationLiteral(pub NumberLiteral, pub DurationType);
 
 impl DurationLiteral {
     pub fn duration(&self) -> Duration {
@@ -88,9 +110,47 @@ impl DurationLiteral {
     }
 }
 
+#[derive(Debug, Default)]
+pub struct Variables(Vec<HashMap<String, IRContextValue>>);
+
+impl Variables {
+    pub fn get_var(&self, name: &str) -> Option<IRContextValue> {
+        for i in self.0.iter().rev() {
+            if let Some(val) = i.get(name) {
+                return Some(val.clone());
+            }
+        }
+        None
+    }
+
+    pub fn get_var_mut(&mut self, name: &str) -> Option<&mut IRContextValue> {
+        for i in self.0.iter_mut().rev() {
+            if let Some(val) = i.get_mut(name) {
+                return Some(val);
+            }
+        }
+        None
+    }
+
+    pub fn set_var(&mut self, name: &str, val: impl Into<IRContextValue>) {
+        self.0
+            .last_mut()
+            .unwrap()
+            .insert(name.to_string(), val.into());
+    }
+
+    pub fn enter_scope(&mut self) {
+        self.0.push(Default::default());
+    }
+
+    pub fn exit_scope(&mut self) {
+        self.0.pop().unwrap();
+    }
+}
+
 pub struct IRContext {
     ir: IR,
-    vars: HashMap<String, IRContextValue>,
+    pub vars: Variables,
     framerate: f32,
     size: (u32, u32),
     pixmap: Pixmap,
@@ -101,11 +161,11 @@ pub struct IRContext {
 pub struct Layer {
     base: Option<Element>,
     #[allow(clippy::type_complexity)]
-    modifier: Option<Box<dyn FnMut(&mut IRContext, Element) -> Element>>,
+    modifier: Option<Box<dyn FnMut(&mut IRContext, Element) -> Option<Element>>>,
 }
 
 impl Layer {
-    pub fn new<F: FnMut(&mut IRContext, Element) -> Element + 'static>(
+    pub fn new<F: FnMut(&mut IRContext, Element) -> Option<Element> + 'static>(
         element: Element,
         modifier: Option<F>,
     ) -> Self {
@@ -120,12 +180,19 @@ impl Layer {
 
     pub fn disable(&mut self) {
         self.base.take();
+        self.modifier.take();
     }
 
     pub fn get(&mut self, ctx: &mut IRContext) -> Option<Element> {
         let mut element = self.base.as_ref()?.clone();
         if let Some(x) = self.modifier.as_mut() {
-            element = x(ctx, element);
+            element = match x(ctx, element) {
+                Some(x) => x,
+                None => {
+                    self.disable();
+                    return None;
+                }
+            };
         };
         Some(element)
     }
@@ -140,7 +207,7 @@ impl IRContext {
     ) -> Self {
         Self {
             ir,
-            vars: HashMap::default(),
+            vars: Variables::default(),
             framerate,
             size,
             layers: vec![],
@@ -193,21 +260,21 @@ impl IRContext {
             .iter()
             .find(|block| block.name.as_str() == name)
             .cloned()
-            .unwrap();
+            .unwrap_or_else(|| panic!("failed to find ir block {name}"));
 
         for stmt in block.body.0 {
             match stmt {
                 IRStatement::Assign(name, _, val) => {
                     let val = self.evaulate_val(&val, args);
-                    self.vars.insert(name.as_str(), val);
+                    self.vars.set_var(&name.as_str(), val);
                 }
                 IRStatement::Return(_, var) => {
-                    let val = self.vars.get(&var.as_str()).cloned().unwrap();
+                    let val = self.vars.get_var(&var.as_str()).unwrap();
                     return Some(val);
                 }
                 IRStatement::SvgAssign(_, var, name, val) => {
-                    let val_as_val = self.vars.get(&val.as_str()).cloned().unwrap();
-                    let var_as_val = self.vars.get_mut(&var.as_str()).unwrap();
+                    let val_as_val = self.vars.get_var(&val.as_str()).unwrap();
+                    let var_as_val = self.vars.get_var_mut(&var.as_str()).unwrap();
                     var_as_val
                         .as_svg_mut()
                         .unwrap_or_else(|| panic!("{} wasn't a svg", var.as_str()))
@@ -222,22 +289,22 @@ impl IRContext {
                 IRStatement::SvgAppend(_, tree, element) => {
                     let element_as_val = self
                         .vars
-                        .get(&element.as_str())
+                        .get_var(&element.as_str())
                         .unwrap()
                         .as_svg()
                         .unwrap()
                         .clone();
                     let tree_as_val = self
                         .vars
-                        .get_mut(&tree.as_str())
+                        .get_var_mut(&tree.as_str())
                         .unwrap()
                         .as_svg_mut()
                         .unwrap();
                     tree_as_val.append(element_as_val);
                 }
                 IRStatement::Play(_, time, tree, modifier) => {
-                    let time_as_val = self.vars.get(&time.as_str()).cloned().unwrap();
-                    let tree_as_val = self.vars.get(&tree.as_str()).cloned().unwrap();
+                    let time_as_val = self.vars.get_var(&time.as_str()).unwrap();
+                    let tree_as_val = self.vars.get_var_mut(&tree.as_str()).unwrap();
 
                     let time = time_as_val
                         .as_duration()
@@ -265,7 +332,7 @@ impl IRContext {
                                     .unwrap();
                                 let res = res.as_svg().unwrap().clone();
                                 local_time += (1.0 / ctx.framerate) / time.as_secs_f32();
-                                res
+                                Some(res)
                             }
                         }),
                     );
@@ -280,6 +347,34 @@ impl IRContext {
 
                     self.disable_layer(layer_id);
                 }
+                IRStatement::Fork(_, time, tree) => {
+                    let time_as_val = self.vars.get_var(&time.as_str()).unwrap();
+                    let tree_as_val = self.vars.get_var(&tree.as_str()).unwrap();
+
+                    let time = time_as_val
+                        .as_duration()
+                        .cloned()
+                        .unwrap_or_else(|| panic!("{} was not a duration", time.as_str()));
+                    let tree = tree_as_val
+                        .as_svg()
+                        .cloned()
+                        .unwrap_or_else(|| panic!("{} was not a svg tree", tree.as_str()));
+
+                    let mut local_time = 0.0;
+
+                    let layer = Layer::new(
+                        tree,
+                        Some(move |ctx: &mut IRContext, element| {
+                            if local_time > 1.0 {
+                                return None;
+                            }
+
+                            local_time += (1.0 / ctx.framerate) / time.as_secs_f32();
+                            Some(element)
+                        }),
+                    );
+                    self.new_layer(layer);
+                }
             }
         }
         None
@@ -292,21 +387,29 @@ impl IRContext {
             IRValue::Number(n) => IRContextValue::Number(n.as_f32()),
             IRValue::Arg(_, n) => {
                 let n = n.as_f32() as usize;
-                args[n].clone()
+                args.get(n).unwrap_or_else(||panic!("tried getting argument {n} that didn't exist, args passed were: {args:?}")).clone()
             }
             IRValue::Str(s) => IRContextValue::Str(s.get_inner_str().to_string()),
             IRValue::Call(_, name, _, args, _) => {
                 let args = args
                     .0
                     .iter()
-                    .map(|x| self.vars.get(&x.as_str()).unwrap().clone())
+                    .map(|x| self.vars.get_var(&x.as_str()).unwrap())
                     .collect::<Vec<_>>();
-                self.evaluate(&name.as_str(), &args)
-                    .unwrap_or(IRContextValue::Null)
+
+                self.vars.enter_scope();
+
+                let res = self
+                    .evaluate(&name.as_str(), &args)
+                    .unwrap_or(IRContextValue::Null);
+
+                self.vars.exit_scope();
+
+                res
             }
             IRValue::BinaryOp(left, op, right) => {
-                let left = self.vars.get(&left.as_str()).unwrap();
-                let right = self.vars.get(&right.as_str()).unwrap();
+                let left = self.vars.get_var(&left.as_str()).unwrap();
+                let right = self.vars.get_var(&right.as_str()).unwrap();
                 match (left, right) {
                     (IRContextValue::Number(left), IRContextValue::Number(right)) => {
                         IRContextValue::Number(match op {
@@ -317,7 +420,7 @@ impl IRContext {
                         })
                     }
                     (IRContextValue::Str(left), right) => {
-                        IRContextValue::Str(left.clone() + &right.as_svg_val().unwrap())
+                        IRContextValue::Str(left + &right.as_svg_val().unwrap())
                     }
                     (left, right) => {
                         todo!("unknown binary operation on {:?} and {:?}", left, right)
@@ -328,12 +431,12 @@ impl IRContext {
                 let args = args
                     .0
                     .iter()
-                    .map(|x| self.vars.get(&x.as_str()).unwrap().clone())
+                    .map(|x| self.vars.get_var(&x.as_str()).unwrap())
                     .collect::<Vec<_>>();
                 self.run_intrinsic(&name.as_str(), &args)
             }
             IRValue::GetField(_, obj, field) => {
-                let obj_as_val = self.vars.get(&obj.as_str()).unwrap();
+                let obj_as_val = self.vars.get_var(&obj.as_str()).unwrap();
                 let obj = obj_as_val.as_object().unwrap_or_else(|| {
                     panic!("{} wasn't an object ({:?})", obj.as_str(), obj_as_val)
                 });
@@ -343,6 +446,11 @@ impl IRContext {
                     })
                     .clone()
             }
+            IRValue::Variable(ident) => self
+                .vars
+                .get_var(&ident.as_str())
+                .unwrap_or_else(|| panic!("unknown variable: {}", ident.as_str())),
+            IRValue::Null(_) => IRContextValue::Null,
         }
     }
 
@@ -361,8 +469,8 @@ impl IRContext {
                 let height = tree.size.height();
                 IRContextValue::Object(
                     [
-                        ("height".to_string(), IRContextValue::Number(height)),
                         ("width".to_string(), IRContextValue::Number(width)),
+                        ("height".to_string(), IRContextValue::Number(height)),
                     ]
                     .into_iter()
                     .collect(),
@@ -372,6 +480,20 @@ impl IRContext {
                 println!("{:?}", args);
                 IRContextValue::Null
             }
+            "screenSize" => IRContextValue::Object(
+                [
+                    (
+                        "width".to_string(),
+                        IRContextValue::Number(self.size.0 as f32),
+                    ),
+                    (
+                        "height".to_string(),
+                        IRContextValue::Number(self.size.1 as f32),
+                    ),
+                ]
+                .into_iter()
+                .collect(),
+            ),
             x => todo!("unknown intrinsic {x}"),
         }
     }

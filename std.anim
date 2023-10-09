@@ -1,3 +1,11 @@
+boundingBox(svg) {
+  return __intrinsic_boundingBox(svg)
+}
+
+screenSize() {
+  return __intrinsic_screenSize()
+}
+
 translate(x,y, tree) {
   return <g :transform="translate(x,y)"> {{ tree }} </g>
 }
@@ -22,7 +30,8 @@ screenCenter(svg) {
 }
 
 translateScreenCenter(svg) {
-  return translate(screenWidth/2, screenHeight/2, svg)
+  size = screenSize()
+  return translate(size.width/2, size.height/2, svg)
 }
 
 image(url) {

@@ -1,3 +1,4 @@
+mod ast;
 mod ir;
 mod lex;
 mod parse;
@@ -43,6 +44,7 @@ use std::{
     process::{Child, ChildStdin, Command, Stdio},
 };
 
+use ast::{convert_ast, Animation};
 use clap::Parser;
 use ir::IR;
 use parse::Parse;
@@ -51,7 +53,10 @@ use resvg::tiny_skia::PixmapRef;
 use crate::ir::IRContext;
 
 pub fn app_main(args: Cli) {
-    let ir_source = std::fs::read_to_string(&args.input).unwrap();
+    let anim_source = std::fs::read_to_string(&args.input).unwrap();
+    let anim = Animation::parse_from_str(&anim_source).unwrap();
+    let ir_source = convert_ast(&anim);
+    println!("generated ir:\n {ir_source}");
     let ir = IR::parse_from_str(&ir_source).expect("IR source to parse");
 
     let mut ffmpeg = FfmpegHandle::new(&args);
@@ -64,6 +69,7 @@ pub fn app_main(args: Cli) {
             ffmpeg.push_image(buf);
         },
     );
+    ctx.vars.enter_scope();
     ctx.evaluate("main", &[]);
 }
 

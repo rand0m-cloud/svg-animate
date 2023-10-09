@@ -3,7 +3,7 @@ use nom::{
     bytes::complete::{is_not, tag, take_till},
     character::complete::{digit1, multispace0, one_of},
     combinator::{all_consuming, map, recognize, value},
-    multi::many1,
+    multi::{many0, many1},
     sequence::{delimited, pair},
     Finish, IResult,
 };
@@ -12,7 +12,7 @@ use crate::parse::Token;
 
 pub fn lex(input: &str) -> Vec<Token> {
     let punctation = "()<>:-+*={}&;|/![].,";
-    let res: IResult<&str, Vec<Option<Token>>> = all_consuming(many1(delimited(
+    let res: IResult<&str, Vec<Option<Token>>> = all_consuming(many0(delimited(
         multispace0,
         alt((
             value(None, pair(tag("#"), take_till(|c| c == '\r' || c == '\n'))),
